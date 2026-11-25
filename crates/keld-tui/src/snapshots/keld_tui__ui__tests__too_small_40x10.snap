@@ -1,0 +1,14 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: "render(&app, 40, 10)"
+---
+┌Keld──────────────────────────────────┐
+│          Terminal too small          │
+│  Need at least 60x16. Current 40x10. │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+└──────────────────────────────────────┘

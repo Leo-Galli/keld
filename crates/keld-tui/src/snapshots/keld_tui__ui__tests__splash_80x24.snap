@@ -1,0 +1,22 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: "render(&app, 80, 24)"
+---
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                         #  # ##### #    ###                                    
+                         # #  #     #    #  #                                   
+                         ##   ####  #    #  #                                   
+                         # #  #     #    #  #                                   
+                         #  # ##### #### ###                                    
+                                                                                
+                             recon . audit . report                             
+                                  v0.1.0                                        
+                                                                                
+                                                                                
+                                                                                
+                            press any key to continue

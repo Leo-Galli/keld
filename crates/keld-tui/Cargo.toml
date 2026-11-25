@@ -1,0 +1,18 @@
+[package]
+name = "keld-tui"
+description = "Keld full-screen terminal UI (ratatui)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+crossterm.workspace = true
+keld-core.workspace = true
+ratatui.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
