@@ -2,21 +2,18 @@
 
 ## Current task
 
-**KL-001** -- Workspace skeleton, splash screen, empty TUI shell, CI green, first PR merged
+**KL-002** -- Theme system (`theme.rs`): dark/light/high-contrast, truecolor/256/16/`NO_COLOR`, symbols + ASCII fallbacks; unit tests
 
 Acceptance:
-- Cargo workspace: `keld-core`, `keld-modules`, `keld-report`, `keld-tui`, `keld-cli`
-- `keld` with no args opens TUI; splash renders exact logo (skippable, `--no-splash`); empty shell (header/sidebar/main/status) renders
-- Compact wordmark + ASCII fallback; `keld --version` shows logo on TTY
-- Panic hook restores terminal
-- Snapshot test(s) for shell at least at 80x24
-- CI: fmt, clippy `-D warnings`, test on Windows/Linux/macOS
-- Docs committed (PLAN, DESIGN, PROGRESS, README, licenses, SECURITY, CONTRIBUTING, CHANGELOG); `CLAUDE.md` not committed
-- PR squash-merged to `main`
+- Themes selectable via API (Settings wiring in KL-023)
+- Color ladder: truecolor -> 256 -> 16; `NO_COLOR` strips styles
+- Fixed Unicode symbol set with ASCII fallbacks used by shell widgets
+- Unit tests for theme resolution and symbol fallback
+- Snapshots still green
 
 ## Done
 
-_(none yet)_
+- **KL-001** -- Workspace skeleton, splash, empty TUI shell, CI -- 2026-11-25 -- https://github.com/Leo-Galli/keld/pull/1
 
 ## Needs Leonardo
 
@@ -24,7 +21,7 @@ _(none yet)_
 - Code-signing certificate (explicitly skipped; document SmartScreen)
 - winget-pkgs fork + PAT / `WINGET_TOKEN` for auto-submit workflow (when releasing)
 - Scoop / Homebrew taps if desired
-- Manual TUI check matrix: Windows Terminal, PowerShell, conhost, Linux, macOS (after KL-001)
+- Manual TUI check matrix: Windows Terminal, PowerShell, conhost, Linux, macOS (after KL-001 / with KL-028)
 
 ## Decisions log
 
@@ -33,12 +30,12 @@ _(none yet)_
 - 2026-11-25: `CLAUDE.md` never committed and never gitignored
 - 2026-11-25: Pure Rust / rustls; no OpenSSL
 - 2026-11-25: Modules emit events only; one engine, two front ends
+- 2026-11-25: First commit on `main` is empty; KL-001 landed via squash-merge of PR #1
 
 ## Backlog (ordered)
 
 ### Foundation
 
-- **KL-002** -- Theme system (`theme.rs`): dark/light/high-contrast, truecolor/256/16/`NO_COLOR`, symbols + ASCII fallbacks; unit tests
 - **KL-003** -- App shell polish: responsive breakpoints, sidebar collapse, terminal-too-small screen, focus ring; snapshots 80/120/200
 - **KL-004** -- Config load (`keld.toml` + env + flags), first-launch acknowledgement persistence
 - **KL-005** -- Event bus + Job model in `keld-core`; stub module that emits progress for TUI/CLI wiring
