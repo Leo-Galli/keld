@@ -1,0 +1,40 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/keld-core",
+    "crates/keld-modules",
+    "crates/keld-report",
+    "crates/keld-tui",
+    "crates/keld-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+authors = ["Leonardo Galli <https://github.com/Leo-Galli>"]
+repository = "https://github.com/Leo-Galli/keld"
+homepage = "https://github.com/Leo-Galli/keld"
+readme = "README.md"
+
+[workspace.dependencies]
+keld-core = { path = "crates/keld-core" }
+keld-modules = { path = "crates/keld-modules" }
+keld-report = { path = "crates/keld-report" }
+keld-tui = { path = "crates/keld-tui" }
+
+anyhow = "1.0.105"
+clap = { version = "4.6.10", features = ["derive", "color", "wrap_help"] }
+crossterm = "0.29.0"
+insta = "1.49.0"
+ratatui = "0.30.2"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

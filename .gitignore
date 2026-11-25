@@ -1,0 +1,23 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Local / secrets
+.env
+.env.*
+*.pem
+*.p12
+
+# Test / tooling
+/out/
+*.log
+.insta/

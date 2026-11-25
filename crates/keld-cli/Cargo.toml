@@ -1,0 +1,21 @@
+[package]
+name = "keld-cli"
+description = "Keld CLI and TUI binary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme.workspace = true
+default-run = "keld"
+
+[[bin]]
+name = "keld"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+keld-core.workspace = true
+keld-tui.workspace = true
