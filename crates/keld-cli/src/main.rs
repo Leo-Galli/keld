@@ -1,12 +1,13 @@
 //! `keld` binary: no args opens the TUI; subcommands arrive in later tasks.
 
 use std::io::{self, IsTerminal, Write};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::Result;
 use clap::Parser;
-use keld_core::{AUTHORIZED_USE, VERSION};
-use keld_tui::{run, version_banner, TuiOptions};
+use keld_core::{load, ConfigOverrides, ThemeName, AUTHORIZED_USE, VERSION};
+use keld_tui::{run, version_banner, ThemeId, TuiOptions};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -20,6 +21,10 @@ struct Cli {
     #[arg(short = 'V', long = "version")]
     version: bool,
 
+    /// Path to `keld.toml` (overrides discovery)
+    #[arg(long = "config", value_name = "PATH")]
+    config: Option<PathBuf>,
+
     /// Skip the splash screen
     #[arg(long)]
     no_splash: bool,
@@ -31,6 +36,10 @@ struct Cli {
     /// Disable colors (also respects NO_COLOR)
     #[arg(long)]
     no_color: bool,
+
+    /// Theme: dark, light, or high-contrast
+    #[arg(long, value_name = "NAME")]
+    theme: Option<String>,
 }
 
 fn main() -> Result<ExitCode> {
@@ -41,11 +50,37 @@ fn main() -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
 
+    let theme = match cli.theme.as_deref() {
+        None => None,
+        Some(t) => match ThemeName::parse(t) {
+            Some(name) => Some(name),
+            None => {
+                eprintln!("warning: unknown theme `{t}`; ignoring flag");
+                None
+            }
+        },
+    };
+
+    let overrides = ConfigOverrides {
+        config_path: cli.config.clone(),
+        no_splash: cli.no_splash.then_some(true),
+        ascii: cli.ascii.then_some(true),
+        no_color: cli.no_color.then_some(true),
+        theme,
+    };
+
+    let loaded = load(&overrides);
+    for w in &loaded.warnings {
+        eprintln!("warning: {w}");
+    }
+
     let opts = TuiOptions {
-        show_splash: !cli.no_splash,
-        ascii: cli.ascii,
-        no_color: cli.no_color || std::env::var_os("NO_COLOR").is_some(),
-        theme_id: keld_tui::ThemeId::Dark,
+        show_splash: loaded.config.splash,
+        ascii: loaded.config.ascii,
+        no_color: loaded.config.no_color,
+        theme_id: ThemeId::from_theme_name(loaded.config.theme),
+        needs_ack: !loaded.config.authorized_ack,
+        config_path: loaded.persist_path,
     };
 
     run(opts).map_err(|e| anyhow::anyhow!(e))?;

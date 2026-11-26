@@ -27,10 +27,13 @@ keld-tui = { path = "crates/keld-tui" }
 anyhow = "1.0.105"
 clap = { version = "4.6.10", features = ["derive", "color", "wrap_help"] }
 crossterm = "0.29.0"
+dirs = "6.0.0"
 insta = "1.49.0"
 ratatui = "0.30.2"
+serde = { version = "1.0.228", features = ["derive"] }
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
+toml = "0.8.23"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 

@@ -3,7 +3,7 @@
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::{App, FocusPane, Phase};
@@ -75,8 +75,47 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
 
     match app.phase {
         Phase::Splash => draw_splash(frame, area, app),
+        Phase::Acknowledge => draw_acknowledge(frame, area, app),
         Phase::Shell => draw_shell(frame, area, app),
     }
+}
+
+fn draw_acknowledge(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    use keld_core::{AUTHORIZED_ACK_PROMPT, AUTHORIZED_USE};
+
+    let mark = if app.ack_checked { "[x]" } else { "[ ]" };
+    let mut lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(AUTHORIZED_USE, app.theme.text_style())),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                format!("{mark} "),
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(AUTHORIZED_ACK_PROMPT, app.theme.text_style()),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Space toggle   Enter confirm   Esc quit",
+            app.theme.muted_style(),
+        )),
+    ];
+    if let Some(err) = &app.ack_error {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            format!("Could not save acknowledgement: {err}"),
+            Style::default().fg(app.theme.error),
+        )));
+    }
+
+    let p = Paragraph::new(lines)
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: true })
+        .block(panel_block(app, "KELD  acknowledge authorized use", true));
+    frame.render_widget(p, area);
 }
 
 fn draw_too_small(frame: &mut Frame<'_>, area: Rect, app: &App) {
@@ -338,6 +377,8 @@ mod tests {
             ascii: true,
             no_color: true,
             theme_id: crate::theme::ThemeId::Dark,
+            needs_ack: false,
+            config_path: std::path::PathBuf::from("keld.toml"),
         }
     }
 
@@ -437,9 +478,31 @@ mod tests {
             ascii: false,
             no_color: true,
             theme_id: crate::theme::ThemeId::Dark,
+            needs_ack: false,
+            config_path: std::path::PathBuf::from("keld.toml"),
         });
         app.clock_override = Some("12:00Z".into());
         let shot = render(&app, 120, 24);
         assert!(shot.contains("▸ Dashboard") || shot.contains('▸'));
+    }
+
+    #[test]
+    fn ack_snapshot_80x24() {
+        let mut app = App::new(TuiOptions {
+            show_splash: false,
+            ascii: true,
+            no_color: true,
+            theme_id: crate::theme::ThemeId::Dark,
+            needs_ack: true,
+            config_path: std::path::PathBuf::from("keld.toml"),
+        });
+        assert_eq!(app.phase, Phase::Acknowledge);
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("acknowledge"));
+        assert!(shot.contains("[ ]"));
+        assert_snapshot!("ack_80x24", shot);
+        app.ack_checked = true;
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("[x]"));
     }
 }
