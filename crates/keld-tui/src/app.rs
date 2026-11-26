@@ -1,7 +1,8 @@
 //! Application state for the TUI shell.
 
 use crate::screen::Screen;
-use crate::theme::Theme;
+use crate::symbols::Symbols;
+use crate::theme::{Theme, ThemeId};
 
 /// Runtime options shared with the CLI.
 #[derive(Debug, Clone)]
@@ -9,6 +10,7 @@ pub struct TuiOptions {
     pub show_splash: bool,
     pub ascii: bool,
     pub no_color: bool,
+    pub theme_id: ThemeId,
 }
 
 impl Default for TuiOptions {
@@ -17,6 +19,7 @@ impl Default for TuiOptions {
             show_splash: true,
             ascii: false,
             no_color: std::env::var_os("NO_COLOR").is_some(),
+            theme_id: ThemeId::Dark,
         }
     }
 }
@@ -34,6 +37,7 @@ pub struct App {
     pub screen: Screen,
     pub theme: Theme,
     pub ascii: bool,
+    pub symbols: Symbols,
     pub should_quit: bool,
     pub workspace_name: String,
     pub scope_summary: String,
@@ -43,7 +47,7 @@ pub struct App {
 
 impl App {
     pub fn new(opts: TuiOptions) -> Self {
-        let theme = Theme::dark().apply_no_color(opts.no_color);
+        let theme = Theme::for_runtime(opts.theme_id, opts.no_color);
         Self {
             phase: if opts.show_splash {
                 Phase::Splash
@@ -53,11 +57,22 @@ impl App {
             screen: Screen::Dashboard,
             theme,
             ascii: opts.ascii,
+            symbols: Symbols::for_mode(opts.ascii),
             should_quit: false,
             workspace_name: "default".into(),
             scope_summary: "(no scope)".into(),
             clock_override: None,
         }
+    }
+
+    /// Switch theme at runtime (Settings screen wires this in KL-023).
+    pub fn set_theme(&mut self, id: ThemeId) {
+        self.theme = self.theme.with_id(id);
+    }
+
+    pub fn set_ascii(&mut self, ascii: bool) {
+        self.ascii = ascii;
+        self.symbols = Symbols::for_mode(ascii);
     }
 
     pub fn skip_splash(&mut self) {

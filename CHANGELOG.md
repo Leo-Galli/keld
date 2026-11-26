@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Theme system: dark / light / high-contrast, truecolor / 256 / 16 / `NO_COLOR`, fixed Unicode symbols with ASCII fallbacks
 - Initial workspace skeleton (`keld-core`, `keld-modules`, `keld-report`, `keld-tui`, `keld-cli`)
 - Splash screen with KELD logo, empty TUI shell (header, sidebar, main, status)
 - CLI entry: no args opens TUI; `--no-splash`, `--ascii`, `--version`
