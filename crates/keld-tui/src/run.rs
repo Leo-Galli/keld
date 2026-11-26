@@ -13,8 +13,8 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use thiserror::Error;
 
-use crate::app::{App, KeyAction, Phase, TuiOptions};
-use crate::ui;
+use crate::app::{App, FocusPane, KeyAction, Phase, TuiOptions};
+use crate::ui::{self, LayoutMode, ShellBody};
 
 const SPLASH_DURATION: Duration = Duration::from_millis(1200);
 const TICK: Duration = Duration::from_millis(33);
@@ -79,7 +79,8 @@ fn event_loop(
 
         match event::read()? {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
-                if let Some(action) = map_key(key.code, key.modifiers, app.phase) {
+                let size = terminal.size()?;
+                if let Some(action) = map_key(key.code, key.modifiers, app, size.width) {
                     app.handle_key(action);
                 } else if app.phase == Phase::Splash {
                     app.skip_splash();
@@ -92,15 +93,46 @@ fn event_loop(
     Ok(())
 }
 
-fn map_key(code: KeyCode, modifiers: KeyModifiers, phase: Phase) -> Option<KeyAction> {
+fn sidebar_visible(app: &App, width: u16) -> bool {
+    // Body width approximates terminal width (header/status are full-width).
+    ShellBody::resolve(LayoutMode::from_width(width), app.sidebar_overlay).shows_sidebar()
+}
+
+fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Option<KeyAction> {
     if modifiers.contains(KeyModifiers::CONTROL) && code == KeyCode::Char('c') {
         return Some(KeyAction::Quit);
     }
+    if app.phase == Phase::Splash {
+        return match code {
+            KeyCode::Char('q') | KeyCode::Esc => Some(KeyAction::Quit),
+            _ => Some(KeyAction::SkipSplash),
+        };
+    }
+
+    let dual = sidebar_visible(app, width);
     match code {
         KeyCode::Char('q') | KeyCode::Esc => Some(KeyAction::Quit),
-        KeyCode::Tab => Some(KeyAction::NextScreen),
-        KeyCode::BackTab => Some(KeyAction::PrevScreen),
-        _ if phase == Phase::Splash => Some(KeyAction::SkipSplash),
+        KeyCode::Char('m') => Some(KeyAction::ToggleSidebar),
+        KeyCode::Tab => {
+            if dual {
+                Some(KeyAction::NextFocus)
+            } else {
+                Some(KeyAction::NextScreen)
+            }
+        }
+        KeyCode::BackTab => {
+            if dual {
+                Some(KeyAction::PrevFocus)
+            } else {
+                Some(KeyAction::PrevScreen)
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') if !dual || app.focus == FocusPane::Sidebar => {
+            Some(KeyAction::PrevScreen)
+        }
+        KeyCode::Down | KeyCode::Char('j') if !dual || app.focus == FocusPane::Sidebar => {
+            Some(KeyAction::NextScreen)
+        }
         _ => None,
     }
 }

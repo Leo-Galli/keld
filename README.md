@@ -62,7 +62,9 @@ Use only on systems you own or are explicitly authorized to test. Active modules
 
 | Key | Action |
 |-----|--------|
-| Tab / Shift+Tab | Move focus |
+| Tab / Shift+Tab | Move focus (or cycle modules in single-pane) |
+| Up / Down / j / k | Change module when sidebar focused |
+| `m` | Toggle sidebar overlay (below 100 cols) |
 | `/` | Filter |
 | `:` | Command palette |
 | `?` | Help |
