@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 use keld_core::{AuditEntry, ThemeName};
 
+use crate::commands::{self, CommandId};
+use crate::keys::KeyPreset;
 use crate::screen::Screen;
 use crate::symbols::Symbols;
 use crate::theme::{Theme, ThemeId};
@@ -25,6 +27,8 @@ pub struct TuiOptions {
     pub audit_entries: Vec<AuditEntry>,
     /// Path shown in the Audit log screen title.
     pub audit_path: PathBuf,
+    /// Initial keybinding preset (Settings persists this in KL-023).
+    pub key_preset: KeyPreset,
 }
 
 impl Default for TuiOptions {
@@ -39,6 +43,7 @@ impl Default for TuiOptions {
             scope_summary: "(no scope)".into(),
             audit_entries: Vec::new(),
             audit_path: PathBuf::from("audit.jsonl"),
+            key_preset: KeyPreset::Vim,
         }
     }
 }
@@ -65,6 +70,15 @@ pub enum Phase {
 pub enum FocusPane {
     Sidebar,
     Main,
+}
+
+/// Modal overlay on top of the shell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Overlay {
+    #[default]
+    None,
+    Palette,
+    Help,
 }
 
 /// Root TUI state.
@@ -96,6 +110,12 @@ pub struct App {
     pub audit_filtering: bool,
     /// Selected row in the filtered audit list.
     pub audit_selected: usize,
+    pub key_preset: KeyPreset,
+    pub overlay: Overlay,
+    pub palette_query: String,
+    pub palette_selected: usize,
+    /// Vim `g` chord: waiting for a second `g`.
+    pub pending_g: bool,
 }
 
 impl App {
@@ -129,6 +149,11 @@ impl App {
             audit_filter: String::new(),
             audit_filtering: false,
             audit_selected: 0,
+            key_preset: opts.key_preset,
+            overlay: Overlay::None,
+            palette_query: String::new(),
+            palette_selected: 0,
+            pending_g: false,
         }
     }
 
@@ -162,9 +187,32 @@ impl App {
         self.audit_selected = self.audit_selected.saturating_sub(1);
     }
 
+    pub fn audit_select_first(&mut self) {
+        self.audit_selected = 0;
+    }
+
+    pub fn audit_select_last(&mut self) {
+        let len = self.audit_filtered().len();
+        self.audit_selected = len.saturating_sub(1);
+    }
+
+    pub fn audit_page(&mut self, down: bool, page: usize) {
+        let len = self.audit_filtered().len();
+        if len == 0 {
+            self.audit_selected = 0;
+            return;
+        }
+        if down {
+            self.audit_selected = (self.audit_selected + page).min(len - 1);
+        } else {
+            self.audit_selected = self.audit_selected.saturating_sub(page);
+        }
+    }
+
     pub fn begin_audit_filter(&mut self) {
         self.audit_filtering = true;
         self.focus = FocusPane::Main;
+        self.pending_g = false;
     }
 
     pub fn end_audit_filter(&mut self) {
@@ -187,6 +235,90 @@ impl App {
     pub fn audit_filter_backspace(&mut self) {
         self.audit_filter.pop();
         self.clamp_audit_selection();
+    }
+
+    pub fn open_palette(&mut self) {
+        self.overlay = Overlay::Palette;
+        self.palette_query.clear();
+        self.palette_selected = 0;
+        self.pending_g = false;
+        self.audit_filtering = false;
+    }
+
+    pub fn open_help(&mut self) {
+        self.overlay = Overlay::Help;
+        self.pending_g = false;
+        self.audit_filtering = false;
+    }
+
+    pub fn close_overlay(&mut self) {
+        self.overlay = Overlay::None;
+        self.palette_query.clear();
+        self.palette_selected = 0;
+        self.pending_g = false;
+    }
+
+    pub fn palette_filtered(&self) -> Vec<&'static commands::Command> {
+        commands::filter_commands(&self.palette_query)
+    }
+
+    fn clamp_palette_selection(&mut self) {
+        let len = self.palette_filtered().len();
+        if len == 0 {
+            self.palette_selected = 0;
+        } else if self.palette_selected >= len {
+            self.palette_selected = len - 1;
+        }
+    }
+
+    pub fn palette_select_next(&mut self) {
+        let len = self.palette_filtered().len();
+        if len == 0 {
+            self.palette_selected = 0;
+            return;
+        }
+        self.palette_selected = (self.palette_selected + 1).min(len - 1);
+    }
+
+    pub fn palette_select_prev(&mut self) {
+        self.palette_selected = self.palette_selected.saturating_sub(1);
+    }
+
+    pub fn palette_query_push(&mut self, c: char) {
+        if !c.is_control() {
+            self.palette_query.push(c);
+            self.clamp_palette_selection();
+        }
+    }
+
+    pub fn palette_query_backspace(&mut self) {
+        self.palette_query.pop();
+        self.clamp_palette_selection();
+    }
+
+    pub fn execute_selected_command(&mut self) {
+        let id = self
+            .palette_filtered()
+            .get(self.palette_selected)
+            .map(|c| c.id);
+        self.close_overlay();
+        if let Some(id) = id {
+            self.run_command(id);
+        }
+    }
+
+    pub fn run_command(&mut self, id: CommandId) {
+        match id {
+            CommandId::GoTo(screen) => {
+                self.screen = screen;
+                self.clamp_audit_selection();
+            }
+            CommandId::ToggleSidebar => self.toggle_sidebar_overlay(),
+            CommandId::OpenHelp => self.open_help(),
+            CommandId::SetPreset(preset) => self.key_preset = preset,
+            CommandId::CyclePreset => self.key_preset = self.key_preset.cycle(),
+            CommandId::Quit => self.quit(),
+        }
     }
 
     /// Switch theme at runtime (Settings screen wires this in KL-023).
@@ -268,55 +400,106 @@ impl App {
                 }
                 _ => {}
             },
-            Phase::Shell => {
-                if self.audit_filtering {
-                    match key {
-                        KeyAction::Quit => self.clear_audit_filter(),
-                        KeyAction::ConfirmAck | KeyAction::EndFilter => self.end_audit_filter(),
-                        KeyAction::FilterBackspace => self.audit_filter_backspace(),
-                        KeyAction::FilterChar(c) => self.audit_filter_push(c),
-                        _ => {}
-                    }
-                    return;
+            Phase::Shell => self.handle_shell_key(key),
+        }
+    }
+
+    fn handle_shell_key(&mut self, key: KeyAction) {
+        if self.overlay == Overlay::Help {
+            match key {
+                KeyAction::CloseOverlay | KeyAction::OpenHelp | KeyAction::Quit => {
+                    self.close_overlay();
                 }
-                match key {
-                    KeyAction::Quit => self.quit(),
-                    KeyAction::NextScreen => {
-                        self.screen = self.screen.next();
-                        self.clamp_audit_selection();
+                _ => {}
+            }
+            return;
+        }
+
+        if self.overlay == Overlay::Palette {
+            match key {
+                KeyAction::CloseOverlay | KeyAction::Quit => self.close_overlay(),
+                KeyAction::ConfirmAck | KeyAction::Activate => self.execute_selected_command(),
+                KeyAction::FilterBackspace => self.palette_query_backspace(),
+                KeyAction::FilterChar(c) => self.palette_query_push(c),
+                KeyAction::ListNext => self.palette_select_next(),
+                KeyAction::ListPrev => self.palette_select_prev(),
+                _ => {}
+            }
+            return;
+        }
+
+        if self.audit_filtering {
+            match key {
+                KeyAction::Quit | KeyAction::CloseOverlay => self.clear_audit_filter(),
+                KeyAction::ConfirmAck | KeyAction::EndFilter | KeyAction::Activate => {
+                    self.end_audit_filter();
+                }
+                KeyAction::FilterBackspace => self.audit_filter_backspace(),
+                KeyAction::FilterChar(c) => self.audit_filter_push(c),
+                _ => {}
+            }
+            return;
+        }
+
+        if !matches!(key, KeyAction::ChordG) {
+            self.pending_g = false;
+        }
+
+        match key {
+            KeyAction::Quit => self.quit(),
+            KeyAction::CloseOverlay => {}
+            KeyAction::OpenPalette => self.open_palette(),
+            KeyAction::OpenHelp => self.open_help(),
+            KeyAction::NextScreen => {
+                self.screen = self.screen.next();
+                self.clamp_audit_selection();
+            }
+            KeyAction::PrevScreen => {
+                self.screen = self.screen.prev();
+                self.clamp_audit_selection();
+            }
+            KeyAction::NextFocus => self.cycle_focus(true),
+            KeyAction::PrevFocus => self.cycle_focus(false),
+            KeyAction::ToggleSidebar => self.toggle_sidebar_overlay(),
+            KeyAction::BeginFilter if self.screen == Screen::AuditLog => {
+                self.begin_audit_filter();
+            }
+            KeyAction::ListNext if self.list_nav_active() => self.audit_select_next(),
+            KeyAction::ListPrev if self.list_nav_active() => self.audit_select_prev(),
+            KeyAction::ListTop if self.list_nav_active() => self.audit_select_first(),
+            KeyAction::ListBottom if self.list_nav_active() => self.audit_select_last(),
+            KeyAction::PageDown if self.list_nav_active() => self.audit_page(true, 10),
+            KeyAction::PageUp if self.list_nav_active() => self.audit_page(false, 10),
+            KeyAction::ChordG if self.key_preset == KeyPreset::Vim => {
+                if self.pending_g {
+                    if self.list_nav_active() {
+                        self.audit_select_first();
                     }
-                    KeyAction::PrevScreen => {
-                        self.screen = self.screen.prev();
-                        self.clamp_audit_selection();
-                    }
-                    KeyAction::NextFocus => self.cycle_focus(true),
-                    KeyAction::PrevFocus => self.cycle_focus(false),
-                    KeyAction::ToggleSidebar => self.toggle_sidebar_overlay(),
-                    KeyAction::BeginFilter if self.screen == Screen::AuditLog => {
-                        self.begin_audit_filter();
-                    }
-                    KeyAction::ListNext
-                        if self.screen == Screen::AuditLog && self.focus == FocusPane::Main =>
-                    {
-                        self.audit_select_next();
-                    }
-                    KeyAction::ListPrev
-                        if self.screen == Screen::AuditLog && self.focus == FocusPane::Main =>
-                    {
-                        self.audit_select_prev();
-                    }
-                    KeyAction::SkipSplash
-                    | KeyAction::ToggleAck
-                    | KeyAction::ConfirmAck
-                    | KeyAction::BeginFilter
-                    | KeyAction::EndFilter
-                    | KeyAction::FilterBackspace
-                    | KeyAction::FilterChar(_)
-                    | KeyAction::ListNext
-                    | KeyAction::ListPrev => {}
+                    self.pending_g = false;
+                } else {
+                    self.pending_g = true;
                 }
             }
+            KeyAction::SkipSplash
+            | KeyAction::ToggleAck
+            | KeyAction::ConfirmAck
+            | KeyAction::Activate
+            | KeyAction::BeginFilter
+            | KeyAction::EndFilter
+            | KeyAction::FilterBackspace
+            | KeyAction::FilterChar(_)
+            | KeyAction::ListNext
+            | KeyAction::ListPrev
+            | KeyAction::ListTop
+            | KeyAction::ListBottom
+            | KeyAction::PageDown
+            | KeyAction::PageUp
+            | KeyAction::ChordG => {}
         }
+    }
+
+    fn list_nav_active(&self) -> bool {
+        self.screen == Screen::AuditLog && self.focus == FocusPane::Main
     }
 }
 
@@ -324,6 +507,9 @@ impl App {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyAction {
     Quit,
+    CloseOverlay,
+    OpenPalette,
+    OpenHelp,
     NextScreen,
     PrevScreen,
     NextFocus,
@@ -332,12 +518,18 @@ pub enum KeyAction {
     SkipSplash,
     ToggleAck,
     ConfirmAck,
+    Activate,
     BeginFilter,
     EndFilter,
     FilterBackspace,
     FilterChar(char),
     ListNext,
     ListPrev,
+    ListTop,
+    ListBottom,
+    PageDown,
+    PageUp,
+    ChordG,
 }
 
 #[cfg(test)]
@@ -355,7 +547,66 @@ mod tests {
             scope_summary: "(no scope)".into(),
             audit_entries: Vec::new(),
             audit_path: PathBuf::from("audit.jsonl"),
+            key_preset: KeyPreset::Vim,
         }
+    }
+
+    #[test]
+    fn palette_fuzzy_and_execute_goto() {
+        let mut app = App::new(opts(false));
+        app.handle_key(KeyAction::OpenPalette);
+        assert_eq!(app.overlay, Overlay::Palette);
+        app.handle_key(KeyAction::FilterChar('a'));
+        app.handle_key(KeyAction::FilterChar('u'));
+        app.handle_key(KeyAction::FilterChar('d'));
+        assert!(app
+            .palette_filtered()
+            .iter()
+            .any(|c| matches!(c.id, CommandId::GoTo(Screen::AuditLog))));
+        // Select audit if not first.
+        while app
+            .palette_filtered()
+            .get(app.palette_selected)
+            .map(|c| c.id)
+            != Some(CommandId::GoTo(Screen::AuditLog))
+        {
+            let before = app.palette_selected;
+            app.palette_select_next();
+            if app.palette_selected == before {
+                break;
+            }
+        }
+        app.handle_key(KeyAction::Activate);
+        assert_eq!(app.overlay, Overlay::None);
+        assert_eq!(app.screen, Screen::AuditLog);
+    }
+
+    #[test]
+    fn help_overlay_opens_and_closes() {
+        let mut app = App::new(opts(false));
+        app.handle_key(KeyAction::OpenHelp);
+        assert_eq!(app.overlay, Overlay::Help);
+        app.handle_key(KeyAction::CloseOverlay);
+        assert_eq!(app.overlay, Overlay::None);
+    }
+
+    #[test]
+    fn cycle_preset_via_command() {
+        let mut app = App::new(opts(false));
+        assert_eq!(app.key_preset, KeyPreset::Vim);
+        app.run_command(CommandId::SetPreset(KeyPreset::Arrows));
+        assert_eq!(app.key_preset, KeyPreset::Arrows);
+        app.run_command(CommandId::CyclePreset);
+        assert_eq!(app.key_preset, KeyPreset::Vim);
+    }
+
+    #[test]
+    fn esc_closes_palette_without_quit() {
+        let mut app = App::new(opts(false));
+        app.open_palette();
+        app.handle_key(KeyAction::Quit);
+        assert!(!app.should_quit);
+        assert_eq!(app.overlay, Overlay::None);
     }
 
     #[test]

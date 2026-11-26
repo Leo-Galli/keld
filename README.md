@@ -66,15 +66,15 @@ Use only on systems you own or are explicitly authorized to test. Active modules
 | Key | Action |
 |-----|--------|
 | Tab / Shift+Tab | Move focus (or cycle modules in single-pane) |
-| Up / Down / j / k | Change module when sidebar focused |
+| Up / Down or j / k | Change module when sidebar focused (preset) |
 | `m` | Toggle sidebar overlay (below 100 cols) |
 | `/` | Filter |
-| `:` | Command palette |
-| `?` | Help |
-| `q` / Esc | Back |
+| `:` | Command palette (fuzzy; includes preset switch) |
+| `?` | Help (active keybinding preset) |
+| `q` / Esc | Back / close overlay |
 | Ctrl+C | Quit (confirm if jobs running) |
 
-Vim-style and arrow-key presets are available in Settings. See [DESIGN.md](DESIGN.md).
+Vim and Arrows presets switch from the command palette (Settings persistence in KL-023). See [DESIGN.md](DESIGN.md).
 
 ## Legal notice
 

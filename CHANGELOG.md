@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Command palette (`:`), help overlay (`?`), and Vim / Arrows keybinding presets (switch via palette; Settings persistence in KL-023)
 - CLI framework: subcommands (`keld doctor`), global `--json` / `--dry-run` / `--rate` / `--concurrency`, colored human output (`NO_COLOR` / `--no-color`), Ctrl+C partial-save hook skeleton
 - Audit log: append-only JSONL API (`AuditLog` / `AuditEntry`); `--audit-log` flag; read-only Audit log TUI screen with filter (`/`) and scroll
 - Scope model: parse/validate `scope.toml` (includes, excludes, notes); `Scope::check` refuses out-of-scope/excluded targets; `--scope` flag; TUI status bar shows active scope summary
