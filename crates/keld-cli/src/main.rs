@@ -163,6 +163,7 @@ fn main() -> Result<ExitCode> {
                 scope_summary: scope.summary(),
                 audit_entries: audit.entries().to_vec(),
                 audit_path,
+                key_preset: keld_tui::KeyPreset::Vim,
             };
 
             run(opts).map_err(|e| anyhow::anyhow!(e))?;

@@ -13,7 +13,8 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use thiserror::Error;
 
-use crate::app::{App, FocusPane, KeyAction, Phase, TuiOptions};
+use crate::app::{App, FocusPane, KeyAction, Overlay, Phase, TuiOptions};
+use crate::keys::KeyPreset;
 use crate::screen::Screen;
 use crate::ui::{self, LayoutMode, ShellBody};
 
@@ -95,7 +96,6 @@ fn event_loop(
 }
 
 fn sidebar_visible(app: &App, width: u16) -> bool {
-    // Body width approximates terminal width (header/status are full-width).
     ShellBody::resolve(LayoutMode::from_width(width), app.sidebar_overlay).shows_sidebar()
 }
 
@@ -119,9 +119,20 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         };
     }
 
+    if app.overlay == Overlay::Help {
+        return match code {
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => Some(KeyAction::CloseOverlay),
+            _ => None,
+        };
+    }
+
+    if app.overlay == Overlay::Palette {
+        return map_palette_key(code, modifiers, app.key_preset);
+    }
+
     if app.audit_filtering {
         return match code {
-            KeyCode::Esc => Some(KeyAction::Quit),
+            KeyCode::Esc => Some(KeyAction::CloseOverlay),
             KeyCode::Enter => Some(KeyAction::EndFilter),
             KeyCode::Backspace => Some(KeyAction::FilterBackspace),
             KeyCode::Char(c) => Some(KeyAction::FilterChar(c)),
@@ -129,35 +140,108 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         };
     }
 
-    let dual = sidebar_visible(app, width);
-    let audit_list = app.screen == Screen::AuditLog && (!dual || app.focus == FocusPane::Main);
-
+    // Global shell keys (both presets).
     match code {
-        KeyCode::Char('q') | KeyCode::Esc => Some(KeyAction::Quit),
-        KeyCode::Char('m') => Some(KeyAction::ToggleSidebar),
-        KeyCode::Char('/') if app.screen == Screen::AuditLog => Some(KeyAction::BeginFilter),
+        KeyCode::Char(':') => return Some(KeyAction::OpenPalette),
+        KeyCode::Char('?') => return Some(KeyAction::OpenHelp),
+        KeyCode::Char('m') => return Some(KeyAction::ToggleSidebar),
+        KeyCode::Char('q') | KeyCode::Esc => return Some(KeyAction::Quit),
+        KeyCode::Char('/') if app.screen == Screen::AuditLog => {
+            return Some(KeyAction::BeginFilter);
+        }
         KeyCode::Tab => {
-            if dual {
-                Some(KeyAction::NextFocus)
+            let dual = sidebar_visible(app, width);
+            return Some(if dual {
+                KeyAction::NextFocus
             } else {
-                Some(KeyAction::NextScreen)
-            }
+                KeyAction::NextScreen
+            });
         }
         KeyCode::BackTab => {
-            if dual {
-                Some(KeyAction::PrevFocus)
+            let dual = sidebar_visible(app, width);
+            return Some(if dual {
+                KeyAction::PrevFocus
             } else {
-                Some(KeyAction::PrevScreen)
+                KeyAction::PrevScreen
+            });
+        }
+        KeyCode::Enter => return Some(KeyAction::Activate),
+        _ => {}
+    }
+
+    map_nav_key(code, modifiers, app, width)
+}
+
+fn map_palette_key(
+    code: KeyCode,
+    _modifiers: KeyModifiers,
+    _preset: KeyPreset,
+) -> Option<KeyAction> {
+    // Palette query accepts every printable char; selection always uses arrows.
+    match code {
+        KeyCode::Esc => Some(KeyAction::CloseOverlay),
+        KeyCode::Enter => Some(KeyAction::Activate),
+        KeyCode::Backspace => Some(KeyAction::FilterBackspace),
+        KeyCode::Down => Some(KeyAction::ListNext),
+        KeyCode::Up => Some(KeyAction::ListPrev),
+        KeyCode::Char(c) => Some(KeyAction::FilterChar(c)),
+        _ => None,
+    }
+}
+
+fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Option<KeyAction> {
+    let dual = sidebar_visible(app, width);
+    let audit_list = app.screen == Screen::AuditLog && (!dual || app.focus == FocusPane::Main);
+    let sidebar_nav = !dual || app.focus == FocusPane::Sidebar;
+
+    if modifiers.contains(KeyModifiers::CONTROL) {
+        if !audit_list || app.key_preset != KeyPreset::Vim {
+            return None;
+        }
+        return match code {
+            KeyCode::Char('d') => Some(KeyAction::PageDown),
+            KeyCode::Char('u') => Some(KeyAction::PageUp),
+            _ => None,
+        };
+    }
+
+    if let Some(action) = preset_list_dir(code, app.key_preset) {
+        if audit_list {
+            return Some(action);
+        }
+        if sidebar_nav {
+            return match action {
+                KeyAction::ListNext => Some(KeyAction::NextScreen),
+                KeyAction::ListPrev => Some(KeyAction::PrevScreen),
+                other => Some(other),
+            };
+        }
+        return None;
+    }
+
+    match (app.key_preset, code) {
+        (KeyPreset::Vim, KeyCode::Char('g')) => Some(KeyAction::ChordG),
+        (KeyPreset::Vim, KeyCode::Char('G')) => {
+            if audit_list {
+                Some(KeyAction::ListBottom)
+            } else {
+                None
             }
         }
-        KeyCode::Up | KeyCode::Char('k') if audit_list => Some(KeyAction::ListPrev),
-        KeyCode::Down | KeyCode::Char('j') if audit_list => Some(KeyAction::ListNext),
-        KeyCode::Up | KeyCode::Char('k') if !dual || app.focus == FocusPane::Sidebar => {
-            Some(KeyAction::PrevScreen)
-        }
-        KeyCode::Down | KeyCode::Char('j') if !dual || app.focus == FocusPane::Sidebar => {
-            Some(KeyAction::NextScreen)
-        }
+        (KeyPreset::Arrows, KeyCode::Home) if audit_list => Some(KeyAction::ListTop),
+        (KeyPreset::Arrows, KeyCode::End) if audit_list => Some(KeyAction::ListBottom),
+        (KeyPreset::Arrows, KeyCode::PageDown) if audit_list => Some(KeyAction::PageDown),
+        (KeyPreset::Arrows, KeyCode::PageUp) if audit_list => Some(KeyAction::PageUp),
+        _ => None,
+    }
+}
+
+fn preset_list_dir(code: KeyCode, preset: KeyPreset) -> Option<KeyAction> {
+    match (preset, code) {
+        (KeyPreset::Vim, KeyCode::Char('j')) => Some(KeyAction::ListNext),
+        (KeyPreset::Vim, KeyCode::Char('k')) => Some(KeyAction::ListPrev),
+        (KeyPreset::Arrows, KeyCode::Down) => Some(KeyAction::ListNext),
+        (KeyPreset::Arrows, KeyCode::Up) => Some(KeyAction::ListPrev),
         _ => None,
     }
 }
@@ -169,4 +253,64 @@ fn install_panic_hook() {
         let _ = execute!(stdout(), LeaveAlternateScreen);
         original(info);
     }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::ThemeId;
+    use std::path::PathBuf;
+
+    fn shell_app(preset: KeyPreset) -> App {
+        App::new(TuiOptions {
+            show_splash: false,
+            ascii: true,
+            no_color: true,
+            theme_id: ThemeId::Dark,
+            needs_ack: false,
+            config_path: PathBuf::from("keld.toml"),
+            scope_summary: "(no scope)".into(),
+            audit_entries: Vec::new(),
+            audit_path: PathBuf::from("audit.jsonl"),
+            key_preset: preset,
+        })
+    }
+
+    #[test]
+    fn colon_opens_palette() {
+        let app = shell_app(KeyPreset::Vim);
+        assert_eq!(
+            map_key(KeyCode::Char(':'), KeyModifiers::NONE, &app, 120),
+            Some(KeyAction::OpenPalette)
+        );
+    }
+
+    #[test]
+    fn question_opens_help() {
+        let app = shell_app(KeyPreset::Arrows);
+        assert_eq!(
+            map_key(KeyCode::Char('?'), KeyModifiers::NONE, &app, 120),
+            Some(KeyAction::OpenHelp)
+        );
+    }
+
+    #[test]
+    fn vim_j_not_arrows() {
+        let vim = shell_app(KeyPreset::Vim);
+        assert_eq!(
+            map_key(KeyCode::Char('j'), KeyModifiers::NONE, &vim, 120),
+            Some(KeyAction::NextScreen)
+        );
+        assert_eq!(map_key(KeyCode::Down, KeyModifiers::NONE, &vim, 120), None);
+
+        let arrows = shell_app(KeyPreset::Arrows);
+        assert_eq!(
+            map_key(KeyCode::Down, KeyModifiers::NONE, &arrows, 120),
+            Some(KeyAction::NextScreen)
+        );
+        assert_eq!(
+            map_key(KeyCode::Char('j'), KeyModifiers::NONE, &arrows, 120),
+            None
+        );
+    }
 }

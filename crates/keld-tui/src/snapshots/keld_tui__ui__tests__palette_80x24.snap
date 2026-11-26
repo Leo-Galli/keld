@@ -1,0 +1,28 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
+┌ Nav ─┐┌ Dashboard ───────────────────────────────────────────────────────────┐
+│*Dash ││Workspace overview placeholder.                                       │
+│ Scan ││                                                                      │
+│ Prob ││Findings chart, jobs and sparklines arrive in KL-010.                 │
+│ TLS  ││Tab moves focus. Up/Down change modules when sidebar focused.         │
+│ HTTP ││m t┌ Command palette ─────────────────────────────────────┐           │
+│ Fuzz ││   │: scan_                                               │           │
+│ DNS  ││   │> Go to Scan                                          │           │
+│ Net  ││   │                                                      │           │
+│ Hash ││   │                                                      │           │
+│ Rpt  ││   │                                                      │           │
+│ Ws   ││   │                                                      │           │
+│ Aud  ││   │                                                      │           │
+│ Set  ││   │                                                      │           │
+│      ││   │                                                      │           │
+│      ││   │                                                      │           │
+│      ││   └──────────────────────────────────────────────────────┘           │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+└──────┘└──────────────────────────────────────────────────────────────────────┘
+ scope: 10.0.0.0/24  jobs:0  rate:0/s  err:0  |  Tab focus  m sidebar  : cmd  ?

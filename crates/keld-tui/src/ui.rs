@@ -6,7 +6,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
-use crate::app::{App, FocusPane, Phase};
+use crate::app::{App, FocusPane, Overlay, Phase};
 use crate::logo::{self, WORDMARK};
 use crate::screen::Screen;
 
@@ -76,7 +76,14 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
     match app.phase {
         Phase::Splash => draw_splash(frame, area, app),
         Phase::Acknowledge => draw_acknowledge(frame, area, app),
-        Phase::Shell => draw_shell(frame, area, app),
+        Phase::Shell => {
+            draw_shell(frame, area, app);
+            match app.overlay {
+                Overlay::None => {}
+                Overlay::Palette => draw_palette(frame, area, app),
+                Overlay::Help => draw_help(frame, area, app),
+            }
+        }
     }
 }
 
@@ -424,23 +431,137 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
     } else {
         "  m sidebar"
     };
+    let list_hint = match app.key_preset {
+        crate::keys::KeyPreset::Vim => "j/k",
+        crate::keys::KeyPreset::Arrows => "Up/Down",
+    };
     let audit_hint = if app.screen == Screen::AuditLog {
         if app.audit_filtering {
-            "  Enter done  Esc clear"
+            "  Enter done  Esc clear".to_string()
         } else {
-            "  / filter  j/k select"
+            format!("  / filter  {list_hint} select")
         }
     } else {
-        ""
+        String::new()
     };
     let text = format!(
-        " scope: {}  jobs:0  rate:0/s  err:0  |  {focus_hint}{narrow_hint}{audit_hint}  ? help  q quit  |  {}",
+        " scope: {}  jobs:0  rate:0/s  err:0  |  {focus_hint}{narrow_hint}{audit_hint}  : cmd  ? help  q quit  |  {} [{}]",
         app.scope_summary,
-        app.screen.title()
+        app.screen.title(),
+        app.key_preset.label()
     );
     frame.render_widget(
         Paragraph::new(Span::styled(text, app.theme.muted_style())),
         area,
+    );
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let popup = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(area);
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup[1])[1]
+}
+
+fn draw_palette(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let popup = centered_rect(70, 50, area);
+    frame.render_widget(Clear, popup);
+
+    let filtered = app.palette_filtered();
+    let mut lines: Vec<Line<'_>> = vec![Line::from(Span::styled(
+        format!(": {}_", app.palette_query),
+        Style::default()
+            .fg(app.theme.accent)
+            .add_modifier(Modifier::BOLD),
+    ))];
+
+    if filtered.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "(no matches)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let inner_h = popup.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(1) as usize;
+        let selected = app.palette_selected.min(filtered.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, cmd) in filtered.iter().enumerate().skip(start).take(visible.max(1)) {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(
+                format!("{marker}{}", cmd.label),
+                style,
+            )));
+        }
+    }
+
+    frame.render_widget(
+        Paragraph::new(lines).block(panel_block(app, " Command palette ", true)),
+        popup,
+    );
+}
+
+fn draw_help(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let popup = centered_rect(72, 70, area);
+    frame.render_widget(Clear, popup);
+
+    let title = format!(" Help  ({}) ", app.key_preset.label());
+    let mut lines: Vec<Line<'_>> = Vec::new();
+    for (keys, action) in app.key_preset.help_rows() {
+        if action.is_empty() {
+            lines.push(Line::from(Span::styled(
+                *keys,
+                Style::default()
+                    .fg(app.theme.accent_secondary)
+                    .add_modifier(Modifier::BOLD),
+            )));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!(" {keys:<18} "),
+                    Style::default()
+                        .fg(app.theme.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(*action, app.theme.text_style()),
+            ]));
+        }
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "Esc / ? / q  close",
+        app.theme.muted_style(),
+    )));
+
+    frame.render_widget(
+        Paragraph::new(lines).block(panel_block(app, title, true)),
+        popup,
     );
 }
 
@@ -489,6 +610,7 @@ mod tests {
             scope_summary: "(no scope)".into(),
             audit_entries: Vec::new(),
             audit_path: std::path::PathBuf::from("audit.jsonl"),
+            key_preset: crate::keys::KeyPreset::Vim,
         }
     }
 
@@ -585,15 +707,8 @@ mod tests {
     #[test]
     fn unicode_sidebar_uses_design_caret() {
         let mut app = App::new(TuiOptions {
-            show_splash: false,
             ascii: false,
-            no_color: true,
-            theme_id: crate::theme::ThemeId::Dark,
-            needs_ack: false,
-            config_path: std::path::PathBuf::from("keld.toml"),
-            scope_summary: "(no scope)".into(),
-            audit_entries: Vec::new(),
-            audit_path: std::path::PathBuf::from("audit.jsonl"),
+            ..test_opts(false)
         });
         app.clock_override = Some("12:00Z".into());
         let shot = render(&app, 120, 24);
@@ -603,15 +718,8 @@ mod tests {
     #[test]
     fn ack_snapshot_80x24() {
         let mut app = App::new(TuiOptions {
-            show_splash: false,
-            ascii: true,
-            no_color: true,
-            theme_id: crate::theme::ThemeId::Dark,
             needs_ack: true,
-            config_path: std::path::PathBuf::from("keld.toml"),
-            scope_summary: "(no scope)".into(),
-            audit_entries: Vec::new(),
-            audit_path: std::path::PathBuf::from("audit.jsonl"),
+            ..test_opts(false)
         });
         assert_eq!(app.phase, Phase::Acknowledge);
         let shot = render(&app, 80, 24);
@@ -652,6 +760,39 @@ mod tests {
         assert!(shot.contains("10.0.0.5"));
         assert!(shot.contains("denied") || shot.contains("Denied") || shot.contains("ok"));
         assert_snapshot!("audit_80x24", shot);
+    }
+
+    #[test]
+    fn palette_snapshot_80x24() {
+        let mut app = shell_app();
+        app.open_palette();
+        app.palette_query = "scan".into();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Command palette"));
+        assert!(shot.contains(": scan"));
+        assert!(shot.contains("Go to Scan"));
+        assert_snapshot!("palette_80x24", shot);
+    }
+
+    #[test]
+    fn help_snapshot_80x24() {
+        let mut app = shell_app();
+        app.open_help();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Help"));
+        assert!(shot.contains("Vim"));
+        assert!(shot.contains("Command palette"));
+        assert_snapshot!("help_80x24", shot);
+    }
+
+    #[test]
+    fn help_arrows_preset_label() {
+        let mut app = shell_app();
+        app.key_preset = crate::keys::KeyPreset::Arrows;
+        app.open_help();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Arrows"));
+        assert!(shot.contains("Up / Down"));
     }
 
     #[test]
