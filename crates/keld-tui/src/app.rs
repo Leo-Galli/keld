@@ -6,6 +6,7 @@ use keld_core::{AuditEntry, Scope, ThemeName};
 
 use crate::commands::{self, CommandId};
 use crate::dashboard::DashboardState;
+use crate::fuzz_view::{FuzzRunState, FuzzView};
 use crate::http_view::{HttpRunState, HttpView};
 use crate::keys::KeyPreset;
 use crate::probe_view::{ProbeRunState, ProbeView};
@@ -137,6 +138,8 @@ pub struct App {
     pub tls: TlsView,
     /// HTTP module form + findings.
     pub http: HttpView,
+    /// Fuzz module form + hits.
+    pub fuzz: FuzzView,
     /// Tick accumulator so job elapsed advances ~1s even at 30 FPS.
     tick_accum: u32,
 }
@@ -184,6 +187,7 @@ impl App {
             probe: ProbeView::default(),
             tls: TlsView::default(),
             http: HttpView::default(),
+            fuzz: FuzzView::default(),
             tick_accum: 0,
         }
     }
@@ -197,6 +201,7 @@ impl App {
         self.probe.poll();
         self.tls.poll();
         self.http.poll();
+        self.fuzz.poll();
         // ~30 FPS tick; advance job clocks once per ~30 ticks (~1s).
         self.tick_accum = self.tick_accum.saturating_add(1);
         if self.tick_accum < 30 {
@@ -250,6 +255,17 @@ impl App {
         }
     }
 
+    pub fn start_fuzz(&mut self) {
+        match self.fuzz.start(&self.scope) {
+            Ok(()) => {}
+            Err(e) => {
+                self.fuzz.error = Some(e.clone());
+                self.fuzz.message = e;
+                self.fuzz.run_state = FuzzRunState::Failed;
+            }
+        }
+    }
+
     pub fn toggle_scan_dry_run(&mut self) {
         self.scan.dry_run = !self.scan.dry_run;
     }
@@ -264,6 +280,10 @@ impl App {
 
     pub fn toggle_http_dry_run(&mut self) {
         self.http.dry_run = !self.http.dry_run;
+    }
+
+    pub fn toggle_fuzz_dry_run(&mut self) {
+        self.fuzz.dry_run = !self.fuzz.dry_run;
     }
 
     pub fn toggle_scan_syn(&mut self) {
@@ -300,6 +320,14 @@ impl App {
 
     pub fn http_prev_field(&mut self) {
         self.http.field = self.http.field.prev();
+    }
+
+    pub fn fuzz_next_field(&mut self) {
+        self.fuzz.field = self.fuzz.field.next();
+    }
+
+    pub fn fuzz_prev_field(&mut self) {
+        self.fuzz.field = self.fuzz.field.prev();
     }
 
     pub fn job_select_next(&mut self) {
@@ -669,6 +697,19 @@ impl App {
             return;
         }
 
+        if self.fuzz.editing && self.screen == Screen::Fuzz {
+            match key {
+                KeyAction::Quit | KeyAction::CloseOverlay => self.fuzz.editing = false,
+                KeyAction::Activate | KeyAction::EndFilter => self.fuzz.editing = false,
+                KeyAction::FilterBackspace => self.fuzz.field_backspace(),
+                KeyAction::FilterChar(c) => self.fuzz.field_push(c),
+                KeyAction::NextFocus => self.fuzz_next_field(),
+                KeyAction::PrevFocus => self.fuzz_prev_field(),
+                _ => {}
+            }
+            return;
+        }
+
         if !matches!(key, KeyAction::ChordG) {
             self.pending_g = false;
         }
@@ -697,6 +738,8 @@ impl App {
                     self.tls_next_field();
                 } else if self.screen == Screen::Http && self.focus == FocusPane::Main {
                     self.http_next_field();
+                } else if self.screen == Screen::Fuzz && self.focus == FocusPane::Main {
+                    self.fuzz_next_field();
                 } else {
                     self.cycle_focus(true);
                 }
@@ -710,6 +753,8 @@ impl App {
                     self.tls_prev_field();
                 } else if self.screen == Screen::Http && self.focus == FocusPane::Main {
                     self.http_prev_field();
+                } else if self.screen == Screen::Fuzz && self.focus == FocusPane::Main {
+                    self.fuzz_prev_field();
                 } else {
                     self.cycle_focus(false);
                 }
@@ -722,6 +767,7 @@ impl App {
             KeyAction::ScanStart if self.screen == Screen::Probe => self.start_probe(),
             KeyAction::ScanStart if self.screen == Screen::Tls => self.start_tls(),
             KeyAction::ScanStart if self.screen == Screen::Http => self.start_http(),
+            KeyAction::ScanStart if self.screen == Screen::Fuzz => self.start_fuzz(),
             KeyAction::ScanToggleDryRun if self.screen == Screen::Scan => {
                 self.toggle_scan_dry_run();
             }
@@ -733,6 +779,9 @@ impl App {
             }
             KeyAction::ScanToggleDryRun if self.screen == Screen::Http => {
                 self.toggle_http_dry_run();
+            }
+            KeyAction::ScanToggleDryRun if self.screen == Screen::Fuzz => {
+                self.toggle_fuzz_dry_run();
             }
             KeyAction::ScanToggleSyn if self.screen == Screen::Scan => {
                 self.toggle_scan_syn();
@@ -750,6 +799,9 @@ impl App {
             }
             KeyAction::Activate if self.screen == Screen::Http && self.focus == FocusPane::Main => {
                 self.http.editing = true;
+            }
+            KeyAction::Activate if self.screen == Screen::Fuzz && self.focus == FocusPane::Main => {
+                self.fuzz.editing = true;
             }
             KeyAction::ListNext if self.audit_list_nav() => self.audit_select_next(),
             KeyAction::ListPrev if self.audit_list_nav() => self.audit_select_prev(),
@@ -769,6 +821,8 @@ impl App {
             KeyAction::ListPrev if self.tls_list_nav() => self.tls.select_prev(),
             KeyAction::ListNext if self.http_list_nav() => self.http.select_next(),
             KeyAction::ListPrev if self.http_list_nav() => self.http.select_prev(),
+            KeyAction::ListNext if self.fuzz_list_nav() => self.fuzz.select_next(),
+            KeyAction::ListPrev if self.fuzz_list_nav() => self.fuzz.select_prev(),
             KeyAction::ChordG if self.key_preset == KeyPreset::Vim => {
                 if self.pending_g {
                     if self.audit_list_nav() {
@@ -824,6 +878,10 @@ impl App {
 
     fn http_list_nav(&self) -> bool {
         self.screen == Screen::Http && self.focus == FocusPane::Main && !self.http.editing
+    }
+
+    fn fuzz_list_nav(&self) -> bool {
+        self.screen == Screen::Fuzz && self.focus == FocusPane::Main && !self.fuzz.editing
     }
 }
 

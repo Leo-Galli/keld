@@ -1,0 +1,28 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
+┌ Nav ─┐┌ Fuzz ────────────────────────────────────────────────────────────────┐
+│ Dash ││>Target [http://10.0.0.5/]   Wordlist [words.txt]                     │
+│ Scan ││ Mode [dir]   Filter [404]   Conc [20]   Timeout [5000]  [ ] dry-run  │
+│ Prob ││Enter edit  Tab fields  s start  p dry-run                            │
+│ TLS  ││Progress ############------------ 50%  probing                        │
+│ HTTP ││                                                                      │
+│*Fuzz ││ Status Size     Word     URL/Host                                    │
+│ DNS  ││> 200    42       admin    http://10.0.0.5/admin                      │
+│ Net  ││ 301    0        backup   http://10.0.0.5/backup                      │
+│ Hash ││                                                                      │
+│ Rpt  ││Detail: admin status=200 size=42 http://10.0.0.5/admin                │
+│ Ws   ││                                                                      │
+│ Jobs ││                                                                      │
+│ Aud  ││                                                                      │
+│ Set  ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+└──────┘└──────────────────────────────────────────────────────────────────────┘
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  m sidebar  s start

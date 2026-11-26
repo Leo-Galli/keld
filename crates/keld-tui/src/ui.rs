@@ -8,6 +8,7 @@ use ratatui::Frame;
 
 use crate::app::{App, FocusPane, Overlay, Phase};
 use crate::dashboard::{self, severity_label};
+use crate::fuzz_view::FuzzField;
 use crate::http_view::HttpField;
 use crate::logo::{self, WORDMARK};
 use crate::probe_view::ProbeField;
@@ -310,6 +311,7 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, fo
         Screen::Probe => draw_probe(frame, area, app, focused),
         Screen::Tls => draw_tls(frame, area, app, focused),
         Screen::Http => draw_http(frame, area, app, focused),
+        Screen::Fuzz => draw_fuzz(frame, area, app, focused),
         _ => {
             let title = format!(" {} ", app.screen.title());
             frame.render_widget(
@@ -741,6 +743,175 @@ fn draw_http(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
         Paragraph::new(lines)
             .style(app.theme.text_style())
             .block(panel_block(app, " HTTP ", focused)),
+        area,
+    );
+}
+
+fn draw_fuzz(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
+    let fuzz = &app.fuzz;
+    let dry = if fuzz.dry_run { "x" } else { " " };
+    let state = match fuzz.run_state {
+        crate::fuzz_view::FuzzRunState::Idle => "idle",
+        crate::fuzz_view::FuzzRunState::Running => "running",
+        crate::fuzz_view::FuzzRunState::Done => "done",
+        crate::fuzz_view::FuzzRunState::Failed => "failed",
+    };
+    let bar_w = (area.width.saturating_sub(28) as usize).clamp(8, 24);
+    let frac = fuzz.progress_fraction().unwrap_or(0.0);
+    let filled = ((frac * bar_w as f64).round() as usize).min(bar_w);
+    let bar = if app.ascii {
+        format!("{}{}", "#".repeat(filled), "-".repeat(bar_w - filled))
+    } else {
+        format!("{}{}", "█".repeat(filled), "░".repeat(bar_w - filled))
+    };
+
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(Span::styled(
+            format!(
+                "{}  {}",
+                field_label(
+                    fuzz.field == FuzzField::Target,
+                    "Target",
+                    &fuzz.target,
+                    fuzz.editing,
+                ),
+                field_label(
+                    fuzz.field == FuzzField::Wordlist,
+                    "Wordlist",
+                    &fuzz.wordlist,
+                    fuzz.editing,
+                ),
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "{}  {}  {}  {}  [{}] dry-run  state:{}",
+                field_label(
+                    fuzz.field == FuzzField::Mode,
+                    "Mode",
+                    &fuzz.mode,
+                    fuzz.editing
+                ),
+                field_label(
+                    fuzz.field == FuzzField::FilterStatus,
+                    "Filter",
+                    &fuzz.filter_status,
+                    fuzz.editing
+                ),
+                field_label(
+                    fuzz.field == FuzzField::Concurrency,
+                    "Conc",
+                    &fuzz.concurrency,
+                    fuzz.editing
+                ),
+                field_label(
+                    fuzz.field == FuzzField::Timeout,
+                    "Timeout",
+                    &fuzz.timeout_ms,
+                    fuzz.editing
+                ),
+                dry,
+                state
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            "Enter edit  Tab fields  s start  p dry-run",
+            app.theme.muted_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "Progress {} {}  {}",
+                bar,
+                fuzz.progress_label(),
+                fuzz.message
+            ),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!(
+                " {:<6} {:<8} {:<8} {}",
+                "Status", "Size", "Word", "URL/Host"
+            ),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    if fuzz.results.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "(no hits yet)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let header_rows = 6u16;
+        let inner_h = area.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(header_rows + 2) as usize;
+        let selected = fuzz.selected.min(fuzz.results.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, hit) in fuzz
+            .results
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(visible.max(1))
+        {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let status = if hit.planned {
+                "plan".to_string()
+            } else {
+                hit.status.to_string()
+            };
+            let size = if hit.planned {
+                "-".to_string()
+            } else {
+                hit.size.to_string()
+            };
+            let target: String = hit
+                .host_header
+                .as_deref()
+                .unwrap_or(hit.url.as_str())
+                .chars()
+                .take(40)
+                .collect();
+            let row = format!(
+                "{marker}{status:<6} {size:<8} {:<8} {target}",
+                hit.word.chars().take(8).collect::<String>()
+            );
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(row, style)));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("Detail: {}", fuzz.detail_line()),
+        app.theme.muted_style(),
+    )));
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(app.theme.text_style())
+            .block(panel_block(app, " Fuzz ", focused)),
         area,
     );
 }
@@ -1195,6 +1366,8 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Screen::Tls => format!("  s start  p dry-run  {list_hint} select"),
         Screen::Http if app.http.editing => "  Enter done  Tab fields".to_string(),
         Screen::Http => format!("  s start  p dry-run  {list_hint} select"),
+        Screen::Fuzz if app.fuzz.editing => "  Enter done  Tab fields".to_string(),
+        Screen::Fuzz => format!("  s start  p dry-run  {list_hint} select"),
         _ => String::new(),
     };
     let text = format!(
@@ -1630,6 +1803,45 @@ mod tests {
         assert!(shot.contains("10.0.0.5"));
         assert!(shot.contains("header") || shot.contains("cookie"));
         assert_snapshot!("http_80x24", shot);
+    }
+
+    #[test]
+    fn fuzz_snapshot_80x24() {
+        use keld_modules::{FuzzHit, FuzzMode};
+        let mut app = shell_app();
+        app.screen = Screen::Fuzz;
+        app.focus = FocusPane::Main;
+        app.fuzz.target = "http://10.0.0.5/".into();
+        app.fuzz.wordlist = "words.txt".into();
+        app.fuzz.mode = "dir".into();
+        app.fuzz.results = vec![
+            FuzzHit {
+                mode: FuzzMode::Dir,
+                word: "admin".into(),
+                url: "http://10.0.0.5/admin".into(),
+                host_header: None,
+                status: 200,
+                size: 42,
+                planned: false,
+            },
+            FuzzHit {
+                mode: FuzzMode::Dir,
+                word: "backup".into(),
+                url: "http://10.0.0.5/backup".into(),
+                host_header: None,
+                status: 301,
+                size: 0,
+                planned: false,
+            },
+        ];
+        app.fuzz.done = 50;
+        app.fuzz.total = 100;
+        app.fuzz.message = "probing".into();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Fuzz"));
+        assert!(shot.contains("10.0.0.5"));
+        assert!(shot.contains("admin") || shot.contains("backup"));
+        assert_snapshot!("fuzz_80x24", shot);
     }
 
     #[test]
