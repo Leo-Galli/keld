@@ -489,10 +489,7 @@ fn passes_filters(
     } else if filter_status.contains(&status) {
         return false;
     }
-    if filter_size.contains(&size) {
-        return false;
-    }
-    true
+    !filter_size.contains(&size)
 }
 
 fn load_wordlist(path: &Path) -> Result<Vec<String>, FuzzError> {
