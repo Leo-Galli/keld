@@ -8,8 +8,14 @@ use std::pin::Pin;
 
 use keld_core::{EventSender, JobId, ModuleKind};
 
+pub mod ports;
+pub mod scan;
 pub mod stub;
 
+pub use ports::{parse_ports, PortParseError, MAX_PORTS, TOP_100};
+pub use scan::{
+    PortHit, PortState, ScanConfig, ScanError, ScanModule, DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_MS,
+};
 pub use stub::StubModule;
 
 /// Shared async contract for every recon/audit module.
@@ -25,9 +31,9 @@ pub trait Module: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 }
 
-/// Registered modules available to CLI/TUI wiring.
+/// Registered modules available to CLI/TUI wiring (stub + scan).
 pub fn module_count() -> usize {
-    1
+    2
 }
 
 /// Build the stub used for event-bus wiring tests and early UI demos.
@@ -41,9 +47,17 @@ mod tests {
     use keld_core::{EventBus, Job, JobState, ModuleEvent};
 
     #[test]
-    fn registry_lists_stub() {
-        assert_eq!(module_count(), 1);
+    fn registry_lists_stub_and_scan() {
+        assert_eq!(module_count(), 2);
         assert_eq!(stub_module().kind(), ModuleKind::Stub);
+        assert_eq!(
+            ScanModule::new(
+                ScanConfig::from_parts("127.0.0.1", "22", 100, 1, true, None).unwrap(),
+                keld_core::Scope::empty(),
+            )
+            .kind(),
+            ModuleKind::Scan
+        );
     }
 
     #[tokio::test]

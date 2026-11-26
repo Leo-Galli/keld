@@ -9,6 +9,7 @@ use ratatui::Frame;
 use crate::app::{App, FocusPane, Overlay, Phase};
 use crate::dashboard::{self, severity_label};
 use crate::logo::{self, WORDMARK};
+use crate::scan_view::ScanField;
 use crate::screen::Screen;
 
 const MIN_WIDTH: u16 = 60;
@@ -302,6 +303,7 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, fo
         Screen::AuditLog => draw_audit(frame, area, app, focused),
         Screen::Dashboard => draw_dashboard(frame, area, app, single_pane, focused),
         Screen::Jobs => draw_jobs(frame, area, app, focused),
+        Screen::Scan => draw_scan(frame, area, app, focused),
         _ => {
             let title = format!(" {} ", app.screen.title());
             frame.render_widget(
@@ -315,6 +317,146 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, fo
             );
         }
     }
+}
+
+fn field_label(active: bool, name: &str, value: &str, editing: bool) -> String {
+    let cursor = if active && editing { "_" } else { "" };
+    let mark = if active { ">" } else { " " };
+    format!("{mark}{name} [{value}{cursor}]")
+}
+
+fn draw_scan(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
+    let scan = &app.scan;
+    let dry = if scan.dry_run { "x" } else { " " };
+    let state = match scan.run_state {
+        crate::scan_view::ScanRunState::Idle => "idle",
+        crate::scan_view::ScanRunState::Running => "running",
+        crate::scan_view::ScanRunState::Done => "done",
+        crate::scan_view::ScanRunState::Failed => "failed",
+    };
+    let bar_w = (area.width.saturating_sub(28) as usize).clamp(8, 24);
+    let frac = scan.progress_fraction().unwrap_or(0.0);
+    let filled = ((frac * bar_w as f64).round() as usize).min(bar_w);
+    let bar = if app.ascii {
+        format!("{}{}", "#".repeat(filled), "-".repeat(bar_w - filled))
+    } else {
+        format!("{}{}", "█".repeat(filled), "░".repeat(bar_w - filled))
+    };
+
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(Span::styled(
+            format!(
+                "{}  {}",
+                field_label(
+                    scan.field == ScanField::Target,
+                    "Target",
+                    &scan.target,
+                    scan.editing
+                ),
+                field_label(
+                    scan.field == ScanField::Ports,
+                    "Ports",
+                    &scan.ports,
+                    scan.editing
+                )
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "{}  {}  [{}] dry-run  state:{}",
+                field_label(
+                    scan.field == ScanField::Concurrency,
+                    "Concurrency",
+                    &scan.concurrency,
+                    scan.editing
+                ),
+                field_label(
+                    scan.field == ScanField::Timeout,
+                    "Timeout",
+                    &scan.timeout_ms,
+                    scan.editing
+                ),
+                dry,
+                state
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            "Enter edit  Tab fields  s start  p dry-run",
+            app.theme.muted_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "Progress {} {}  {}",
+                bar,
+                scan.progress_label(),
+                scan.message
+            ),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!(" {:<16} {:>6} {:<10}", "Host", "Port", "State"),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    if scan.results.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "(no results yet)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let header_rows = 6u16;
+        let inner_h = area.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(header_rows + 2) as usize;
+        let selected = scan.selected.min(scan.results.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, hit) in scan
+            .results
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(visible.max(1))
+        {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let row = format!("{marker}{:<16} {:>6} {:<10}", hit.host, hit.port, hit.state);
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(row, style)));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("Detail: {}", scan.detail_line()),
+        app.theme.muted_style(),
+    )));
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(app.theme.text_style())
+            .block(panel_block(app, " Scan ", focused)),
+        area,
+    );
 }
 
 fn draw_dashboard(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, focused: bool) {
@@ -609,6 +751,8 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Screen::AuditLog if app.audit_filtering => "  Enter done  Esc clear".to_string(),
         Screen::AuditLog => format!("  / filter  {list_hint} select"),
         Screen::Jobs => format!("  {list_hint} select"),
+        Screen::Scan if app.scan.editing => "  Enter done  Tab fields".to_string(),
+        Screen::Scan => format!("  s start  p dry-run  {list_hint} select"),
         _ => String::new(),
     };
     let text = format!(
@@ -778,6 +922,7 @@ mod tests {
             needs_ack: false,
             config_path: std::path::PathBuf::from("keld.toml"),
             scope_summary: "(no scope)".into(),
+            scope: keld_core::Scope::empty(),
             audit_entries: Vec::new(),
             audit_path: std::path::PathBuf::from("audit.jsonl"),
             key_preset: crate::keys::KeyPreset::Vim,
@@ -889,6 +1034,37 @@ mod tests {
         assert!(shot.contains("running") || shot.contains("done"));
         assert!(shot.contains("j-00") || shot.contains("j-01"));
         assert_snapshot!("jobs_80x24", shot);
+    }
+
+    #[test]
+    fn scan_snapshot_80x24() {
+        use keld_modules::{PortHit, PortState};
+        let mut app = shell_app();
+        app.screen = Screen::Scan;
+        app.focus = FocusPane::Main;
+        app.scan.target = "10.0.0.5".into();
+        app.scan.ports = "1-1024".into();
+        app.scan.results = vec![
+            PortHit {
+                host: "10.0.0.5".into(),
+                port: 22,
+                state: PortState::Open,
+            },
+            PortHit {
+                host: "10.0.0.5".into(),
+                port: 80,
+                state: PortState::Open,
+            },
+        ];
+        app.scan.done = 42;
+        app.scan.total = 100;
+        app.scan.message = "scanning".into();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Scan"));
+        assert!(shot.contains("10.0.0.5"));
+        assert!(shot.contains("22"));
+        assert!(shot.contains("open") || shot.contains("Open"));
+        assert_snapshot!("scan_80x24", shot);
     }
 
     #[test]

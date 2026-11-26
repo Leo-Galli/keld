@@ -11,8 +11,10 @@ repository.workspace = true
 [dependencies]
 crossterm.workspace = true
 keld-core.workspace = true
+keld-modules.workspace = true
 ratatui.workspace = true
 thiserror.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

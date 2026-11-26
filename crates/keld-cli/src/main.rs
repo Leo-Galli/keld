@@ -3,6 +3,7 @@
 mod color;
 mod doctor;
 mod output;
+mod scan_cmd;
 mod signal;
 
 use std::io::{self, IsTerminal, Write};
@@ -15,6 +16,7 @@ use keld_core::{
     default_audit_path, load, load_scope_optional, AuditLog, ConfigOverrides, ThemeName,
     AUTHORIZED_USE, VERSION,
 };
+use keld_modules::DEFAULT_TIMEOUT_MS;
 use keld_tui::{run, version_banner, ThemeId, TuiOptions};
 
 use crate::color::ColorMode;
@@ -69,11 +71,11 @@ struct Cli {
     #[arg(long, global = true)]
     dry_run: bool,
 
-    /// Max requests per second (reserved for modules; unused by doctor)
+    /// Max requests per second (modules)
     #[arg(long, value_name = "N", global = true)]
     rate: Option<u32>,
 
-    /// Max concurrent workers (reserved for modules; unused by doctor)
+    /// Max concurrent workers (modules)
     #[arg(long, value_name = "N", global = true)]
     concurrency: Option<u32>,
 
@@ -85,6 +87,17 @@ struct Cli {
 enum Commands {
     /// Report terminal, privilege and network capability checks
     Doctor,
+    /// TCP connect port scan (authorized targets only)
+    Scan {
+        /// Host or IP in scope
+        target: String,
+        /// Ports: `22`, `80,443`, `1-1024`, `top`, `top1000` (default: top)
+        #[arg(short, long, default_value = "top")]
+        ports: String,
+        /// Connect timeout in milliseconds
+        #[arg(long, default_value_t = DEFAULT_TIMEOUT_MS)]
+        timeout: u64,
+    },
 }
 
 fn main() -> Result<ExitCode> {
@@ -126,15 +139,12 @@ fn main() -> Result<ExitCode> {
     }
 
     let color = ColorMode::detect(loaded.config.no_color);
+    let audit_path = cli.audit_log.clone().unwrap_or_else(default_audit_path);
 
     match cli.command {
         Some(Commands::Doctor) => {
-            // Install hook so doctor (and later commands) share one Ctrl+C path.
             let hook = PartialSaveHook::new();
-            // shortcut: empty saver until modules emit results (KL-011+)
             hook.install(|| {});
-            let _keep = (cli.dry_run, cli.rate, cli.concurrency);
-
             let report = DoctorContext {
                 no_color: loaded.config.no_color,
                 ascii: loaded.config.ascii,
@@ -149,8 +159,30 @@ fn main() -> Result<ExitCode> {
             }
             Ok(ExitCode::SUCCESS)
         }
+        Some(Commands::Scan {
+            target,
+            ports,
+            timeout,
+        }) => {
+            let mut audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
+            let code = scan_cmd::run(
+                scan_cmd::ScanArgs {
+                    target,
+                    ports,
+                    timeout_ms: timeout,
+                    concurrency: cli.concurrency.unwrap_or(0),
+                    dry_run: cli.dry_run,
+                    rate: cli.rate,
+                    json: cli.json,
+                    color,
+                },
+                &scope,
+                &mut audit,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            Ok(ExitCode::from(code))
+        }
         None => {
-            let audit_path = cli.audit_log.clone().unwrap_or_else(default_audit_path);
             let audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
 
             let opts = TuiOptions {
@@ -161,6 +193,7 @@ fn main() -> Result<ExitCode> {
                 needs_ack: !loaded.config.authorized_ack,
                 config_path: loaded.persist_path,
                 scope_summary: scope.summary(),
+                scope,
                 audit_entries: audit.entries().to_vec(),
                 audit_path,
                 key_preset: keld_tui::KeyPreset::Vim,
@@ -187,11 +220,12 @@ mod tests {
     use clap::CommandFactory;
 
     #[test]
-    fn cli_help_mentions_doctor_and_json() {
+    fn cli_help_mentions_scan_and_doctor() {
         let mut help = Vec::new();
         Cli::command().write_long_help(&mut help).unwrap();
         let help = String::from_utf8(help).unwrap();
         assert!(help.contains("doctor") || help.contains("Doctor"));
+        assert!(help.contains("scan") || help.contains("Scan"));
         assert!(help.contains("--json"));
         assert!(help.contains("--dry-run"));
     }
@@ -201,6 +235,34 @@ mod tests {
         let cli = Cli::try_parse_from(["keld", "doctor", "--json"]).unwrap();
         assert!(cli.json);
         assert!(matches!(cli.command, Some(Commands::Doctor)));
+    }
+
+    #[test]
+    fn parses_scan_with_ports() {
+        let cli = Cli::try_parse_from([
+            "keld",
+            "--dry-run",
+            "scan",
+            "127.0.0.1",
+            "--ports",
+            "22,80",
+            "--timeout",
+            "500",
+        ])
+        .unwrap();
+        assert!(cli.dry_run);
+        match cli.command {
+            Some(Commands::Scan {
+                target,
+                ports,
+                timeout,
+            }) => {
+                assert_eq!(target, "127.0.0.1");
+                assert_eq!(ports, "22,80");
+                assert_eq!(timeout, 500);
+            }
+            other => panic!("expected Scan, got {other:?}"),
+        }
     }
 
     #[test]

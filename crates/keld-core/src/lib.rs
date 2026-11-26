@@ -7,6 +7,7 @@ pub mod audit;
 pub mod config;
 pub mod event;
 pub mod job;
+pub mod rate;
 pub mod scope;
 
 pub use audit::{
@@ -19,6 +20,7 @@ pub use config::{
 };
 pub use event::{EventBus, EventSender, LogLevel, ModuleEvent, DEFAULT_BUS_CAPACITY};
 pub use job::{Job, JobError, JobId, JobState, ModuleKind};
+pub use rate::RateLimiter;
 pub use scope::{
     load as load_scope, load_optional as load_scope_optional, Scope, ScopeEntry, ScopeError,
     DEFAULT_SCOPE_FILE,

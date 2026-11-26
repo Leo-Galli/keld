@@ -141,12 +141,30 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         };
     }
 
+    if app.scan.editing && app.screen == Screen::Scan {
+        return match code {
+            KeyCode::Esc => Some(KeyAction::CloseOverlay),
+            KeyCode::Enter => Some(KeyAction::EndFilter),
+            KeyCode::Backspace => Some(KeyAction::FilterBackspace),
+            KeyCode::Tab => Some(KeyAction::NextFocus),
+            KeyCode::BackTab => Some(KeyAction::PrevFocus),
+            KeyCode::Char(c) => Some(KeyAction::FilterChar(c)),
+            _ => None,
+        };
+    }
+
     // Global shell keys (both presets).
     match code {
         KeyCode::Char(':') => return Some(KeyAction::OpenPalette),
         KeyCode::Char('?') => return Some(KeyAction::OpenHelp),
         KeyCode::Char('m') => return Some(KeyAction::ToggleSidebar),
         KeyCode::Char('q') | KeyCode::Esc => return Some(KeyAction::Quit),
+        KeyCode::Char('s') if app.screen == Screen::Scan => {
+            return Some(KeyAction::ScanStart);
+        }
+        KeyCode::Char('p') if app.screen == Screen::Scan => {
+            return Some(KeyAction::ScanToggleDryRun);
+        }
         KeyCode::Char('/') if app.screen == Screen::AuditLog => {
             return Some(KeyAction::BeginFilter);
         }
@@ -192,8 +210,9 @@ fn map_palette_key(
 
 fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Option<KeyAction> {
     let dual = sidebar_visible(app, width);
-    let main_list = matches!(app.screen, Screen::AuditLog | Screen::Jobs)
-        && (!dual || app.focus == FocusPane::Main);
+    let main_list = matches!(app.screen, Screen::AuditLog | Screen::Jobs | Screen::Scan)
+        && (!dual || app.focus == FocusPane::Main)
+        && !(app.screen == Screen::Scan && app.scan.editing);
     let audit_list = app.screen == Screen::AuditLog && main_list;
     let sidebar_nav = !dual || app.focus == FocusPane::Sidebar;
 
@@ -273,6 +292,7 @@ mod tests {
             needs_ack: false,
             config_path: PathBuf::from("keld.toml"),
             scope_summary: "(no scope)".into(),
+            scope: keld_core::Scope::empty(),
             audit_entries: Vec::new(),
             audit_path: PathBuf::from("audit.jsonl"),
             key_preset: preset,

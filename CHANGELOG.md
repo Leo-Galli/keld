@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `keld scan`: TCP connect port scanner (ranges, lists, `top`/`top1000`, timeout, concurrency, `--dry-run`, `--rate`, `--json`); scope-gated; audit logged; TUI Scan screen with form, progress, results table
+- Rate limiter helper in `keld-core`
 - Dashboard screen: workspace overview, findings-by-severity bars, RPS sparkline, recent jobs, open-ports summary (placeholder data); Jobs list screen with progress/duration/results; jobs keep advancing across screen switches
 - Command palette (`:`), help overlay (`?`), and Vim / Arrows keybinding presets (switch via palette; Settings persistence in KL-023)
 - CLI framework: subcommands (`keld doctor`), global `--json` / `--dry-run` / `--rate` / `--concurrency`, colored human output (`NO_COLOR` / `--no-color`), Ctrl+C partial-save hook skeleton
