@@ -2,6 +2,7 @@
 
 mod color;
 mod doctor;
+mod fuzz_cmd;
 mod http_cmd;
 mod output;
 mod probe_cmd;
@@ -20,7 +21,8 @@ use keld_core::{
     AUTHORIZED_USE, VERSION,
 };
 use keld_modules::{
-    DEFAULT_HTTP_TIMEOUT_MS, DEFAULT_PROBE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, DEFAULT_TLS_TIMEOUT_MS,
+    DEFAULT_FUZZ_TIMEOUT_MS, DEFAULT_HTTP_TIMEOUT_MS, DEFAULT_PROBE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS,
+    DEFAULT_TLS_TIMEOUT_MS,
 };
 use keld_tui::{run, version_banner, ThemeId, TuiOptions};
 
@@ -135,6 +137,29 @@ enum Commands {
         target: String,
         /// Request timeout in milliseconds
         #[arg(long, default_value_t = DEFAULT_HTTP_TIMEOUT_MS)]
+        timeout: u64,
+    },
+    /// Directory and virtual-host discovery from a wordlist
+    Fuzz {
+        /// URL or host in scope (scheme defaults to http)
+        target: String,
+        /// Wordlist file (one entry per line; `#` comments skipped)
+        #[arg(short, long, value_name = "PATH")]
+        wordlist: PathBuf,
+        /// Mode: `dir` (path) or `vhost` (Host header)
+        #[arg(long, default_value = "dir")]
+        mode: String,
+        /// Status codes to hide when match-status is empty (default: 404; `none` clears)
+        #[arg(long, default_value = "404", value_name = "CODES")]
+        filter_status: String,
+        /// Only keep these status codes (disables filter-status when set)
+        #[arg(long, default_value = "", value_name = "CODES")]
+        match_status: String,
+        /// Hide responses with these body sizes
+        #[arg(long, default_value = "", value_name = "SIZES")]
+        filter_size: String,
+        /// Request timeout in milliseconds
+        #[arg(long, default_value_t = DEFAULT_FUZZ_TIMEOUT_MS)]
         timeout: u64,
     },
 }
@@ -287,6 +312,37 @@ fn main() -> Result<ExitCode> {
             .map_err(|e| anyhow::anyhow!(e))?;
             Ok(ExitCode::from(code))
         }
+        Some(Commands::Fuzz {
+            target,
+            wordlist,
+            mode,
+            filter_status,
+            match_status,
+            filter_size,
+            timeout,
+        }) => {
+            let mut audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
+            let code = fuzz_cmd::run(
+                fuzz_cmd::FuzzArgs {
+                    target,
+                    wordlist,
+                    mode,
+                    filter_status,
+                    match_status,
+                    filter_size,
+                    timeout_ms: timeout,
+                    concurrency: cli.concurrency.unwrap_or(0),
+                    dry_run: cli.dry_run,
+                    rate: cli.rate,
+                    json: cli.json,
+                    color,
+                },
+                &scope,
+                &mut audit,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            Ok(ExitCode::from(code))
+        }
         None => {
             let audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
 
@@ -334,8 +390,46 @@ mod tests {
         assert!(help.contains("probe") || help.contains("Probe"));
         assert!(help.contains("tls") || help.contains("Tls") || help.contains("TLS"));
         assert!(help.contains("http") || help.contains("Http") || help.contains("HTTP"));
+        assert!(help.contains("fuzz") || help.contains("Fuzz"));
         assert!(help.contains("--json"));
         assert!(help.contains("--dry-run"));
+    }
+
+    #[test]
+    fn parses_fuzz_target() {
+        let cli = Cli::try_parse_from([
+            "keld",
+            "--dry-run",
+            "fuzz",
+            "http://127.0.0.1/",
+            "-w",
+            "words.txt",
+            "--mode",
+            "vhost",
+            "--filter-status",
+            "404,403",
+            "--timeout",
+            "2500",
+        ])
+        .unwrap();
+        match cli.command {
+            Some(Commands::Fuzz {
+                target,
+                wordlist,
+                mode,
+                filter_status,
+                timeout,
+                ..
+            }) => {
+                assert_eq!(target, "http://127.0.0.1/");
+                assert_eq!(wordlist, PathBuf::from("words.txt"));
+                assert_eq!(mode, "vhost");
+                assert_eq!(filter_status, "404,403");
+                assert_eq!(timeout, 2500);
+            }
+            other => panic!("expected Fuzz, got {other:?}"),
+        }
+        assert!(cli.dry_run);
     }
 
     #[test]

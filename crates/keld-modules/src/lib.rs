@@ -8,6 +8,7 @@ use std::pin::Pin;
 
 use keld_core::{EventSender, JobId, ModuleKind};
 
+pub mod fuzz;
 pub mod http;
 pub mod ports;
 pub mod probe;
@@ -17,6 +18,11 @@ pub mod stub;
 pub mod syn_path;
 pub mod tls;
 
+pub use fuzz::{
+    parse_fuzz_summary, parse_u16_list, parse_u64_list, FuzzConfig, FuzzError, FuzzFilters,
+    FuzzHit, FuzzMode, FuzzModule, FuzzRunOpts, DEFAULT_FILTER_STATUS, DEFAULT_FUZZ_CONCURRENCY,
+    DEFAULT_FUZZ_TIMEOUT_MS,
+};
 pub use http::{
     parse_http_summary, HttpConfig, HttpError, HttpFinding, HttpModule, HttpSeverity,
     DEFAULT_HTTP_CONCURRENCY, DEFAULT_HTTP_TIMEOUT_MS,
@@ -51,9 +57,9 @@ pub trait Module: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 }
 
-/// Registered modules available to CLI/TUI wiring (stub + scan + probe + tls + http).
+/// Registered modules available to CLI/TUI wiring (stub + scan + probe + tls + http + fuzz).
 pub fn module_count() -> usize {
-    5
+    6
 }
 
 /// Build the stub used for event-bus wiring tests and early UI demos.
@@ -67,8 +73,8 @@ mod tests {
     use keld_core::{EventBus, Job, JobState, ModuleEvent};
 
     #[test]
-    fn registry_lists_stub_scan_probe_tls_and_http() {
-        assert_eq!(module_count(), 5);
+    fn registry_lists_stub_scan_probe_tls_http_and_fuzz() {
+        assert_eq!(module_count(), 6);
         assert_eq!(stub_module().kind(), ModuleKind::Stub);
         assert_eq!(
             ScanModule::new(
@@ -101,6 +107,26 @@ mod tests {
             )
             .kind(),
             ModuleKind::Http
+        );
+        assert_eq!(
+            FuzzModule::new(
+                FuzzConfig::from_parts(
+                    "http://127.0.0.1/",
+                    "words.txt",
+                    FuzzMode::Dir,
+                    FuzzRunOpts {
+                        timeout_ms: 100,
+                        concurrency: 1,
+                        dry_run: true,
+                        rate_per_sec: None,
+                    },
+                    FuzzFilters::default_status(),
+                )
+                .unwrap(),
+                keld_core::Scope::empty(),
+            )
+            .kind(),
+            ModuleKind::Fuzz
         );
     }
 

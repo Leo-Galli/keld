@@ -147,12 +147,14 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
             app.scan.editing,
             app.probe.editing,
             app.tls.editing,
-            app.http.editing
+            app.http.editing,
+            app.fuzz.editing
         ),
-        (Screen::Scan, true, _, _, _)
-            | (Screen::Probe, _, true, _, _)
-            | (Screen::Tls, _, _, true, _)
-            | (Screen::Http, _, _, _, true)
+        (Screen::Scan, true, _, _, _, _)
+            | (Screen::Probe, _, true, _, _, _)
+            | (Screen::Tls, _, _, true, _, _)
+            | (Screen::Http, _, _, _, true, _)
+            | (Screen::Fuzz, _, _, _, _, true)
     );
     if module_editing {
         return match code {
@@ -175,7 +177,7 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         KeyCode::Char('s')
             if matches!(
                 app.screen,
-                Screen::Scan | Screen::Probe | Screen::Tls | Screen::Http
+                Screen::Scan | Screen::Probe | Screen::Tls | Screen::Http | Screen::Fuzz
             ) =>
         {
             return Some(KeyAction::ScanStart);
@@ -183,7 +185,7 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         KeyCode::Char('p')
             if matches!(
                 app.screen,
-                Screen::Scan | Screen::Probe | Screen::Tls | Screen::Http
+                Screen::Scan | Screen::Probe | Screen::Tls | Screen::Http | Screen::Fuzz
             ) =>
         {
             return Some(KeyAction::ScanToggleDryRun);
@@ -238,12 +240,19 @@ fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) ->
     let dual = sidebar_visible(app, width);
     let main_list = matches!(
         app.screen,
-        Screen::AuditLog | Screen::Jobs | Screen::Scan | Screen::Probe | Screen::Tls | Screen::Http
+        Screen::AuditLog
+            | Screen::Jobs
+            | Screen::Scan
+            | Screen::Probe
+            | Screen::Tls
+            | Screen::Http
+            | Screen::Fuzz
     ) && (!dual || app.focus == FocusPane::Main)
         && !(app.screen == Screen::Scan && app.scan.editing)
         && !(app.screen == Screen::Probe && app.probe.editing)
         && !(app.screen == Screen::Tls && app.tls.editing)
-        && !(app.screen == Screen::Http && app.http.editing);
+        && !(app.screen == Screen::Http && app.http.editing)
+        && !(app.screen == Screen::Fuzz && app.fuzz.editing);
     let audit_list = app.screen == Screen::AuditLog && main_list;
     let sidebar_nav = !dual || app.focus == FocusPane::Sidebar;
 

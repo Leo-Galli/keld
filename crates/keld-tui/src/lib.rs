@@ -3,6 +3,7 @@
 pub mod app;
 pub mod commands;
 pub mod dashboard;
+pub mod fuzz_view;
 pub mod http_view;
 pub mod keys;
 pub mod logo;
