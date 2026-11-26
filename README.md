@@ -41,7 +41,8 @@ keld --theme light
 keld --help
 keld doctor
 keld doctor --json
-keld scan --help
+keld scan 127.0.0.1 --ports top --dry-run
+keld scan 10.0.0.5 --ports 1-1024 --timeout 500 --json
 ```
 
 Use only on systems you own or are explicitly authorized to test. Active modules require a scope (`scope.toml` or explicit targets). Out-of-scope targets are refused. Every action is written to an audit log.

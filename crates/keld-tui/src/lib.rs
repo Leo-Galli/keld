@@ -6,6 +6,7 @@ pub mod dashboard;
 pub mod keys;
 pub mod logo;
 pub mod run;
+pub mod scan_view;
 pub mod screen;
 pub mod symbols;
 pub mod theme;

@@ -10,7 +10,8 @@ repository.workspace = true
 
 [dependencies]
 keld-core.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "net"] }

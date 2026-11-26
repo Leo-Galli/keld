@@ -2,11 +2,12 @@
 
 use std::path::PathBuf;
 
-use keld_core::{AuditEntry, ThemeName};
+use keld_core::{AuditEntry, Scope, ThemeName};
 
 use crate::commands::{self, CommandId};
 use crate::dashboard::DashboardState;
 use crate::keys::KeyPreset;
+use crate::scan_view::{ScanRunState, ScanView};
 use crate::screen::Screen;
 use crate::symbols::Symbols;
 use crate::theme::{Theme, ThemeId};
@@ -24,6 +25,8 @@ pub struct TuiOptions {
     pub config_path: PathBuf,
     /// Active scope summary for header and status bar.
     pub scope_summary: String,
+    /// Full scope for module checks (Scan start).
+    pub scope: Scope,
     /// Loaded audit entries (read-only viewer; append happens via core API).
     pub audit_entries: Vec<AuditEntry>,
     /// Path shown in the Audit log screen title.
@@ -42,6 +45,7 @@ impl Default for TuiOptions {
             needs_ack: true,
             config_path: PathBuf::from("keld.toml"),
             scope_summary: "(no scope)".into(),
+            scope: Scope::empty(),
             audit_entries: Vec::new(),
             audit_path: PathBuf::from("audit.jsonl"),
             key_preset: KeyPreset::Vim,
@@ -96,6 +100,7 @@ pub struct App {
     pub should_quit: bool,
     pub workspace_name: String,
     pub scope_summary: String,
+    pub scope: Scope,
     /// When set, header shows this instead of the live clock (tests).
     pub clock_override: Option<String>,
     pub ack_checked: bool,
@@ -121,6 +126,8 @@ pub struct App {
     pub dashboard: DashboardState,
     /// Selected row on the Jobs screen.
     pub job_selected: usize,
+    /// Scan module form + results.
+    pub scan: ScanView,
     /// Tick accumulator so job elapsed advances ~1s even at 30 FPS.
     tick_accum: u32,
 }
@@ -146,6 +153,7 @@ impl App {
             should_quit: false,
             workspace_name: "default".into(),
             scope_summary: opts.scope_summary,
+            scope: opts.scope,
             clock_override: None,
             ack_checked: false,
             needs_ack: opts.needs_ack,
@@ -163,6 +171,7 @@ impl App {
             pending_g: false,
             dashboard: DashboardState::placeholder(),
             job_selected: 0,
+            scan: ScanView::default(),
             tick_accum: 0,
         }
     }
@@ -172,6 +181,7 @@ impl App {
         if self.phase != Phase::Shell {
             return;
         }
+        self.scan.poll();
         // ~30 FPS tick; advance job clocks once per ~30 ticks (~1s).
         self.tick_accum = self.tick_accum.saturating_add(1);
         if self.tick_accum < 30 {
@@ -179,6 +189,29 @@ impl App {
         }
         self.tick_accum = 0;
         self.dashboard.tick();
+    }
+
+    pub fn start_scan(&mut self) {
+        match self.scan.start(&self.scope) {
+            Ok(()) => {}
+            Err(e) => {
+                self.scan.error = Some(e.clone());
+                self.scan.message = e;
+                self.scan.run_state = ScanRunState::Failed;
+            }
+        }
+    }
+
+    pub fn toggle_scan_dry_run(&mut self) {
+        self.scan.dry_run = !self.scan.dry_run;
+    }
+
+    pub fn scan_next_field(&mut self) {
+        self.scan.field = self.scan.field.next();
+    }
+
+    pub fn scan_prev_field(&mut self) {
+        self.scan.field = self.scan.field.prev();
     }
 
     pub fn job_select_next(&mut self) {
@@ -496,6 +529,19 @@ impl App {
             return;
         }
 
+        if self.scan.editing && self.screen == Screen::Scan {
+            match key {
+                KeyAction::Quit | KeyAction::CloseOverlay => self.scan.editing = false,
+                KeyAction::Activate | KeyAction::EndFilter => self.scan.editing = false,
+                KeyAction::FilterBackspace => self.scan.field_backspace(),
+                KeyAction::FilterChar(c) => self.scan.field_push(c),
+                KeyAction::NextFocus => self.scan_next_field(),
+                KeyAction::PrevFocus => self.scan_prev_field(),
+                _ => {}
+            }
+            return;
+        }
+
         if !matches!(key, KeyAction::ChordG) {
             self.pending_g = false;
         }
@@ -515,11 +561,30 @@ impl App {
                 self.clamp_audit_selection();
                 self.clamp_job_selection();
             }
-            KeyAction::NextFocus => self.cycle_focus(true),
-            KeyAction::PrevFocus => self.cycle_focus(false),
+            KeyAction::NextFocus => {
+                if self.screen == Screen::Scan && self.focus == FocusPane::Main {
+                    self.scan_next_field();
+                } else {
+                    self.cycle_focus(true);
+                }
+            }
+            KeyAction::PrevFocus => {
+                if self.screen == Screen::Scan && self.focus == FocusPane::Main {
+                    self.scan_prev_field();
+                } else {
+                    self.cycle_focus(false);
+                }
+            }
             KeyAction::ToggleSidebar => self.toggle_sidebar_overlay(),
             KeyAction::BeginFilter if self.screen == Screen::AuditLog => {
                 self.begin_audit_filter();
+            }
+            KeyAction::ScanStart if self.screen == Screen::Scan => self.start_scan(),
+            KeyAction::ScanToggleDryRun if self.screen == Screen::Scan => {
+                self.toggle_scan_dry_run();
+            }
+            KeyAction::Activate if self.screen == Screen::Scan && self.focus == FocusPane::Main => {
+                self.scan.editing = true;
             }
             KeyAction::ListNext if self.audit_list_nav() => self.audit_select_next(),
             KeyAction::ListPrev if self.audit_list_nav() => self.audit_select_prev(),
@@ -531,6 +596,8 @@ impl App {
             KeyAction::ListPrev if self.jobs_list_nav() => self.job_select_prev(),
             KeyAction::ListTop if self.jobs_list_nav() => self.job_select_first(),
             KeyAction::ListBottom if self.jobs_list_nav() => self.job_select_last(),
+            KeyAction::ListNext if self.scan_list_nav() => self.scan.select_next(),
+            KeyAction::ListPrev if self.scan_list_nav() => self.scan.select_prev(),
             KeyAction::ChordG if self.key_preset == KeyPreset::Vim => {
                 if self.pending_g {
                     if self.audit_list_nav() {
@@ -557,7 +624,9 @@ impl App {
             | KeyAction::ListBottom
             | KeyAction::PageDown
             | KeyAction::PageUp
-            | KeyAction::ChordG => {}
+            | KeyAction::ChordG
+            | KeyAction::ScanStart
+            | KeyAction::ScanToggleDryRun => {}
         }
     }
 
@@ -567,6 +636,10 @@ impl App {
 
     fn jobs_list_nav(&self) -> bool {
         self.screen == Screen::Jobs && self.focus == FocusPane::Main
+    }
+
+    fn scan_list_nav(&self) -> bool {
+        self.screen == Screen::Scan && self.focus == FocusPane::Main && !self.scan.editing
     }
 }
 
@@ -597,6 +670,8 @@ pub enum KeyAction {
     PageDown,
     PageUp,
     ChordG,
+    ScanStart,
+    ScanToggleDryRun,
 }
 
 #[cfg(test)]
@@ -612,6 +687,7 @@ mod tests {
             needs_ack,
             config_path: PathBuf::from("keld.toml"),
             scope_summary: "(no scope)".into(),
+            scope: Scope::empty(),
             audit_entries: Vec::new(),
             audit_path: PathBuf::from("audit.jsonl"),
             key_preset: KeyPreset::Vim,
