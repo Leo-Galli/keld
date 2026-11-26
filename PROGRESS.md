@@ -2,16 +2,17 @@
 
 ## Current task
 
-**KL-005** -- Event bus + Job model in `keld-core`; stub module that emits progress for TUI/CLI wiring
+**KL-006** -- Scope model + `scope.toml` parse/validate/exclude; refuse out-of-scope; status-bar scope summary
 
 Acceptance:
-- Typed event channel for progress / results / errors
-- `Job` model (id, module, state, counters)
-- Stub module emits progress events consumable by TUI or CLI
-- Unit tests for bus and job state transitions
+- Parse and validate `scope.toml` (includes, excludes, notes)
+- Refuse out-of-scope targets with a clear error
+- TUI status bar shows active scope summary
+- Unit tests for include/exclude and refusal
 
 ## Done
 
+- **KL-005** -- Event bus + Job model in `keld-core`; stub module that emits progress for TUI/CLI wiring -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/9
 - **KL-004** -- Config load (`keld.toml` + env + flags), first-launch acknowledgement persistence -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/7
 - **KL-003** -- App shell polish: responsive breakpoints, sidebar collapse, terminal-too-small screen, focus ring; snapshots 80/120/200 -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/5
 - **KL-002** -- Theme system (`theme.rs`): dark/light/high-contrast, truecolor/256/16/`NO_COLOR`, symbols + ASCII fallbacks -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/3
@@ -27,6 +28,7 @@ Acceptance:
 
 ## Decisions log
 
+- 2026-11-26: Event bus uses tokio `broadcast` (fan-out to CLI/TUI/audit); modules get `EventSender`; lag is reported, not blocking
 - 2026-11-26: Config precedence file < env < flags; persist ack to user config dir (or `--config` / loaded file); Space toggles ack checkbox, Enter confirms
 - 2026-11-26: LayoutMode Full (>=100) / Compact (70-99 abbrev strip) / Single (<70); `m` forces full sidebar overlay; Tab toggles focus when dual-pane
 - 2026-11-26: Color depth via env (`COLORTERM`, `TERM`, `WT_SESSION`, Apple Terminal build); high-contrast forces 16 when 256 requested
@@ -41,7 +43,6 @@ Acceptance:
 
 ### Foundation
 
-- **KL-005** -- Event bus + Job model in `keld-core`; stub module that emits progress for TUI/CLI wiring
 - **KL-006** -- Scope model + `scope.toml` parse/validate/exclude; refuse out-of-scope; status-bar scope summary
 - **KL-007** -- Audit log (file + API); Audit log TUI viewer (read-only)
 - **KL-008** -- CLI framework: global flags, `--json`, colored output, Ctrl+C partial-save hook skeleton, `keld doctor` stub
