@@ -45,6 +45,7 @@ fn main() -> Result<ExitCode> {
         show_splash: !cli.no_splash,
         ascii: cli.ascii,
         no_color: cli.no_color || std::env::var_os("NO_COLOR").is_some(),
+        theme_id: keld_tui::ThemeId::Dark,
     };
 
     run(opts).map_err(|e| anyhow::anyhow!(e))?;

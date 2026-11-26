@@ -47,7 +47,7 @@ fn draw_too_small(frame: &mut Frame<'_>, area: Rect, app: &App) {
 }
 
 fn draw_splash(frame: &mut Frame<'_>, area: Rect, app: &App) {
-    let lines = logo::splash_text(app.ascii);
+    let lines = logo::splash_text(app.ascii, &app.theme);
     let height = lines.len() as u16 + 2;
     let width = lines
         .iter()
@@ -140,12 +140,12 @@ fn draw_body(frame: &mut Frame<'_>, area: Rect, app: &App) {
 }
 
 fn draw_sidebar(frame: &mut Frame<'_>, area: Rect, app: &App) {
-    let marker = if app.ascii { "> " } else { "▸ " };
+    let marker = app.symbols.selected_marker();
     let items: Vec<Line<'_>> = Screen::ALL
         .iter()
         .map(|s| {
             let selected = *s == app.screen;
-            let prefix = if selected { marker } else { "  " };
+            let prefix = if selected { marker.as_str() } else { "  " };
             let style = if selected {
                 Style::default()
                     .fg(app.theme.accent)
@@ -240,13 +240,18 @@ mod tests {
         out
     }
 
-    #[test]
-    fn shell_snapshot_80x24() {
-        let mut app = App::new(TuiOptions {
-            show_splash: false,
+    fn test_opts(show_splash: bool) -> TuiOptions {
+        TuiOptions {
+            show_splash,
             ascii: true,
             no_color: true,
-        });
+            theme_id: crate::theme::ThemeId::Dark,
+        }
+    }
+
+    #[test]
+    fn shell_snapshot_80x24() {
+        let mut app = App::new(test_opts(false));
         app.scope_summary = "10.0.0.0/24".into();
         app.clock_override = Some("12:00Z".into());
         let shot = render(&app, 80, 24);
@@ -257,21 +262,26 @@ mod tests {
 
     #[test]
     fn splash_snapshot_80x24() {
-        let app = App::new(TuiOptions {
-            show_splash: true,
-            ascii: true,
-            no_color: true,
-        });
+        let app = App::new(test_opts(true));
         assert_snapshot!("splash_80x24", render(&app, 80, 24));
     }
 
     #[test]
     fn too_small_snapshot() {
-        let app = App::new(TuiOptions {
-            show_splash: false,
-            ascii: true,
-            no_color: true,
-        });
+        let app = App::new(test_opts(false));
         assert_snapshot!("too_small_40x10", render(&app, 40, 10));
+    }
+
+    #[test]
+    fn unicode_sidebar_uses_design_caret() {
+        let mut app = App::new(TuiOptions {
+            show_splash: false,
+            ascii: false,
+            no_color: true,
+            theme_id: crate::theme::ThemeId::Dark,
+        });
+        app.clock_override = Some("12:00Z".into());
+        let shot = render(&app, 120, 24);
+        assert!(shot.contains("▸ Dashboard") || shot.contains('▸'));
     }
 }
