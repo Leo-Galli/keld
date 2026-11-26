@@ -2,10 +2,11 @@
 
 ## Current task
 
-**KL-014** -- `tls`: chain, expiry, protocols, weak ciphers, HSTS; CLI + TUI + tests
+**KL-015** -- `http`: headers, cookies, CORS, fingerprint, robots/sitemap; CLI + TUI + tests
 
 ## Done
 
+- **KL-014** -- `tls`: chain, expiry, protocols, weak ciphers, HSTS; CLI + TUI + tests -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/27
 - **KL-013** -- `probe`: banner/service detection + embedded signature file; CLI + TUI + tests -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/25
 - **KL-012** -- `scan`: optional SYN path (Npcap/root) with clear fallback messaging in doctor/TUI -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/23
 - **KL-011** -- `scan`: TCP connect scanner (ranges, top-ports, timeout, concurrency, dry-run); CLI + TUI + tests -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/21
@@ -30,6 +31,7 @@
 
 ## Decisions log
 
+- 2026-11-26: TLS uses rustls + tokio-rustls + webpki-roots + x509-parser (no OpenSSL). Inspect handshake accepts any chain to collect metadata; separate webpki verify finding; protocol probe is TLS 1.2/1.3 only (client does not offer TLS 1.0/1.1); weak-cipher report classifies the negotiated suite (RC4/DES/NULL weak, CBC/RSA-kx medium); HSTS via HTTPS GET after handshake. Default port `443`. TUI TLS reuses `s`/`p`; also fixed Probe/TLS key wiring in `run.rs`
 - 2026-11-26: Probe uses a curated embedded `signatures.keld` (not full nmap DB): null banner listen then port-hinted payloads; byte-regex matches; unmatched null banners reported as `unknown`; TUI reuses `s`/`p` like Scan
 - 2026-11-26: SYN is opt-in (`--syn`, TUI `y`). It runs only when a raw IPv4 TCP socket opens (Unix root or CAP_NET_RAW). Windows blocks raw TCP; Npcap is reported and is not used to inject frames. Otherwise the job uses TCP connect and the reason is shown by doctor, the CLI, and the Scan screen. SYN probes are serial on one socket and IPv4-only
 - 2026-11-26: TCP connect scan uses tokio `TcpStream` + semaphore concurrency; ports via `top`/`top1000`/ranges; dry-run emits planned probes only; TUI Scan runs worker thread + mpsc poll on tick (event loop stays sync); open ports only as Result events
@@ -53,7 +55,6 @@
 
 ### Modules
 
-- **KL-014** -- `tls`: chain, expiry, protocols, weak ciphers, HSTS; CLI + TUI + tests
 - **KL-015** -- `http`: headers, cookies, CORS, fingerprint, robots/sitemap; CLI + TUI + tests
 - **KL-016** -- `fuzz`: dir + vhost wordlist discovery, filters; CLI + TUI + tests
 - **KL-017** -- `dns`: records, AXFR check, wordlist + CT subdomains; CLI + TUI + tests
