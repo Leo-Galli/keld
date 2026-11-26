@@ -9,10 +9,13 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+hickory-proto.workspace = true
+hickory-resolver.workspace = true
 keld-core.workspace = true
 regex.workspace = true
 reqwest.workspace = true
 rustls.workspace = true
+serde_json.workspace = true
 socket2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

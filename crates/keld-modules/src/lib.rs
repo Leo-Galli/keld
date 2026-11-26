@@ -8,6 +8,7 @@ use std::pin::Pin;
 
 use keld_core::{EventSender, JobId, ModuleKind};
 
+pub mod dns;
 pub mod fuzz;
 pub mod http;
 pub mod ports;
@@ -18,6 +19,10 @@ pub mod stub;
 pub mod syn_path;
 pub mod tls;
 
+pub use dns::{
+    parse_ct_json, parse_dns_summary, DnsConfig, DnsError, DnsHit, DnsKind, DnsModule, DnsRunOpts,
+    DnsSeverity, DEFAULT_CT_BASE, DEFAULT_DNS_CONCURRENCY, DEFAULT_DNS_TIMEOUT_MS,
+};
 pub use fuzz::{
     parse_fuzz_summary, parse_u16_list, parse_u64_list, FuzzConfig, FuzzError, FuzzFilters,
     FuzzHit, FuzzMode, FuzzModule, FuzzRunOpts, DEFAULT_FILTER_STATUS, DEFAULT_FUZZ_CONCURRENCY,
@@ -57,9 +62,9 @@ pub trait Module: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 }
 
-/// Registered modules available to CLI/TUI wiring (stub + scan + probe + tls + http + fuzz).
+/// Registered modules available to CLI/TUI wiring (stub + scan + probe + tls + http + fuzz + dns).
 pub fn module_count() -> usize {
-    6
+    7
 }
 
 /// Build the stub used for event-bus wiring tests and early UI demos.
@@ -73,8 +78,8 @@ mod tests {
     use keld_core::{EventBus, Job, JobState, ModuleEvent};
 
     #[test]
-    fn registry_lists_stub_scan_probe_tls_http_and_fuzz() {
-        assert_eq!(module_count(), 6);
+    fn registry_lists_stub_scan_probe_tls_http_fuzz_and_dns() {
+        assert_eq!(module_count(), 7);
         assert_eq!(stub_module().kind(), ModuleKind::Stub);
         assert_eq!(
             ScanModule::new(
@@ -127,6 +132,25 @@ mod tests {
             )
             .kind(),
             ModuleKind::Fuzz
+        );
+        assert_eq!(
+            DnsModule::new(
+                DnsConfig::from_parts(
+                    "example.test",
+                    None,
+                    false,
+                    DnsRunOpts {
+                        timeout_ms: 100,
+                        concurrency: 1,
+                        dry_run: true,
+                        rate_per_sec: None,
+                    },
+                )
+                .unwrap(),
+                keld_core::Scope::empty(),
+            )
+            .kind(),
+            ModuleKind::Dns
         );
     }
 

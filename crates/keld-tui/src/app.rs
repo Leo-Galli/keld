@@ -6,6 +6,7 @@ use keld_core::{AuditEntry, Scope, ThemeName};
 
 use crate::commands::{self, CommandId};
 use crate::dashboard::DashboardState;
+use crate::dns_view::{DnsRunState, DnsView};
 use crate::fuzz_view::{FuzzRunState, FuzzView};
 use crate::http_view::{HttpRunState, HttpView};
 use crate::keys::KeyPreset;
@@ -140,6 +141,8 @@ pub struct App {
     pub http: HttpView,
     /// Fuzz module form + hits.
     pub fuzz: FuzzView,
+    /// DNS module form + findings.
+    pub dns: DnsView,
     /// Tick accumulator so job elapsed advances ~1s even at 30 FPS.
     tick_accum: u32,
 }
@@ -188,6 +191,7 @@ impl App {
             tls: TlsView::default(),
             http: HttpView::default(),
             fuzz: FuzzView::default(),
+            dns: DnsView::default(),
             tick_accum: 0,
         }
     }
@@ -202,6 +206,7 @@ impl App {
         self.tls.poll();
         self.http.poll();
         self.fuzz.poll();
+        self.dns.poll();
         // ~30 FPS tick; advance job clocks once per ~30 ticks (~1s).
         self.tick_accum = self.tick_accum.saturating_add(1);
         if self.tick_accum < 30 {
@@ -266,6 +271,17 @@ impl App {
         }
     }
 
+    pub fn start_dns(&mut self) {
+        match self.dns.start(&self.scope) {
+            Ok(()) => {}
+            Err(e) => {
+                self.dns.error = Some(e.clone());
+                self.dns.message = e;
+                self.dns.run_state = DnsRunState::Failed;
+            }
+        }
+    }
+
     pub fn toggle_scan_dry_run(&mut self) {
         self.scan.dry_run = !self.scan.dry_run;
     }
@@ -284,6 +300,14 @@ impl App {
 
     pub fn toggle_fuzz_dry_run(&mut self) {
         self.fuzz.dry_run = !self.fuzz.dry_run;
+    }
+
+    pub fn toggle_dns_dry_run(&mut self) {
+        self.dns.dry_run = !self.dns.dry_run;
+    }
+
+    pub fn toggle_dns_ct(&mut self) {
+        self.dns.ct = !self.dns.ct;
     }
 
     pub fn toggle_scan_syn(&mut self) {
@@ -328,6 +352,14 @@ impl App {
 
     pub fn fuzz_prev_field(&mut self) {
         self.fuzz.field = self.fuzz.field.prev();
+    }
+
+    pub fn dns_next_field(&mut self) {
+        self.dns.field = self.dns.field.next();
+    }
+
+    pub fn dns_prev_field(&mut self) {
+        self.dns.field = self.dns.field.prev();
     }
 
     pub fn job_select_next(&mut self) {
@@ -710,6 +742,19 @@ impl App {
             return;
         }
 
+        if self.dns.editing && self.screen == Screen::Dns {
+            match key {
+                KeyAction::Quit | KeyAction::CloseOverlay => self.dns.editing = false,
+                KeyAction::Activate | KeyAction::EndFilter => self.dns.editing = false,
+                KeyAction::FilterBackspace => self.dns.field_backspace(),
+                KeyAction::FilterChar(c) => self.dns.field_push(c),
+                KeyAction::NextFocus => self.dns_next_field(),
+                KeyAction::PrevFocus => self.dns_prev_field(),
+                _ => {}
+            }
+            return;
+        }
+
         if !matches!(key, KeyAction::ChordG) {
             self.pending_g = false;
         }
@@ -740,6 +785,8 @@ impl App {
                     self.http_next_field();
                 } else if self.screen == Screen::Fuzz && self.focus == FocusPane::Main {
                     self.fuzz_next_field();
+                } else if self.screen == Screen::Dns && self.focus == FocusPane::Main {
+                    self.dns_next_field();
                 } else {
                     self.cycle_focus(true);
                 }
@@ -755,6 +802,8 @@ impl App {
                     self.http_prev_field();
                 } else if self.screen == Screen::Fuzz && self.focus == FocusPane::Main {
                     self.fuzz_prev_field();
+                } else if self.screen == Screen::Dns && self.focus == FocusPane::Main {
+                    self.dns_prev_field();
                 } else {
                     self.cycle_focus(false);
                 }
@@ -768,6 +817,7 @@ impl App {
             KeyAction::ScanStart if self.screen == Screen::Tls => self.start_tls(),
             KeyAction::ScanStart if self.screen == Screen::Http => self.start_http(),
             KeyAction::ScanStart if self.screen == Screen::Fuzz => self.start_fuzz(),
+            KeyAction::ScanStart if self.screen == Screen::Dns => self.start_dns(),
             KeyAction::ScanToggleDryRun if self.screen == Screen::Scan => {
                 self.toggle_scan_dry_run();
             }
@@ -783,8 +833,14 @@ impl App {
             KeyAction::ScanToggleDryRun if self.screen == Screen::Fuzz => {
                 self.toggle_fuzz_dry_run();
             }
+            KeyAction::ScanToggleDryRun if self.screen == Screen::Dns => {
+                self.toggle_dns_dry_run();
+            }
             KeyAction::ScanToggleSyn if self.screen == Screen::Scan => {
                 self.toggle_scan_syn();
+            }
+            KeyAction::DnsToggleCt if self.screen == Screen::Dns => {
+                self.toggle_dns_ct();
             }
             KeyAction::Activate if self.screen == Screen::Scan && self.focus == FocusPane::Main => {
                 self.scan.editing = true;
@@ -802,6 +858,9 @@ impl App {
             }
             KeyAction::Activate if self.screen == Screen::Fuzz && self.focus == FocusPane::Main => {
                 self.fuzz.editing = true;
+            }
+            KeyAction::Activate if self.screen == Screen::Dns && self.focus == FocusPane::Main => {
+                self.dns.editing = true;
             }
             KeyAction::ListNext if self.audit_list_nav() => self.audit_select_next(),
             KeyAction::ListPrev if self.audit_list_nav() => self.audit_select_prev(),
@@ -823,6 +882,8 @@ impl App {
             KeyAction::ListPrev if self.http_list_nav() => self.http.select_prev(),
             KeyAction::ListNext if self.fuzz_list_nav() => self.fuzz.select_next(),
             KeyAction::ListPrev if self.fuzz_list_nav() => self.fuzz.select_prev(),
+            KeyAction::ListNext if self.dns_list_nav() => self.dns.select_next(),
+            KeyAction::ListPrev if self.dns_list_nav() => self.dns.select_prev(),
             KeyAction::ChordG if self.key_preset == KeyPreset::Vim => {
                 if self.pending_g {
                     if self.audit_list_nav() {
@@ -852,7 +913,8 @@ impl App {
             | KeyAction::ChordG
             | KeyAction::ScanStart
             | KeyAction::ScanToggleDryRun
-            | KeyAction::ScanToggleSyn => {}
+            | KeyAction::ScanToggleSyn
+            | KeyAction::DnsToggleCt => {}
         }
     }
 
@@ -882,6 +944,10 @@ impl App {
 
     fn fuzz_list_nav(&self) -> bool {
         self.screen == Screen::Fuzz && self.focus == FocusPane::Main && !self.fuzz.editing
+    }
+
+    fn dns_list_nav(&self) -> bool {
+        self.screen == Screen::Dns && self.focus == FocusPane::Main && !self.dns.editing
     }
 }
 
@@ -915,6 +981,7 @@ pub enum KeyAction {
     ScanStart,
     ScanToggleDryRun,
     ScanToggleSyn,
+    DnsToggleCt,
 }
 
 #[cfg(test)]

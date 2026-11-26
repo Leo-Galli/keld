@@ -8,6 +8,7 @@ use ratatui::Frame;
 
 use crate::app::{App, FocusPane, Overlay, Phase};
 use crate::dashboard::{self, severity_label};
+use crate::dns_view::DnsField;
 use crate::fuzz_view::FuzzField;
 use crate::http_view::HttpField;
 use crate::logo::{self, WORDMARK};
@@ -312,6 +313,7 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, fo
         Screen::Tls => draw_tls(frame, area, app, focused),
         Screen::Http => draw_http(frame, area, app, focused),
         Screen::Fuzz => draw_fuzz(frame, area, app, focused),
+        Screen::Dns => draw_dns(frame, area, app, focused),
         _ => {
             let title = format!(" {} ", app.screen.title());
             frame.render_widget(
@@ -743,6 +745,148 @@ fn draw_http(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
         Paragraph::new(lines)
             .style(app.theme.text_style())
             .block(panel_block(app, " HTTP ", focused)),
+        area,
+    );
+}
+
+fn draw_dns(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
+    let dns = &app.dns;
+    let dry = if dns.dry_run { "x" } else { " " };
+    let ct = if dns.ct { "x" } else { " " };
+    let state = match dns.run_state {
+        crate::dns_view::DnsRunState::Idle => "idle",
+        crate::dns_view::DnsRunState::Running => "running",
+        crate::dns_view::DnsRunState::Done => "done",
+        crate::dns_view::DnsRunState::Failed => "failed",
+    };
+    let bar_w = (area.width.saturating_sub(28) as usize).clamp(8, 24);
+    let frac = dns.progress_fraction().unwrap_or(0.0);
+    let filled = ((frac * bar_w as f64).round() as usize).min(bar_w);
+    let bar = if app.ascii {
+        format!("{}{}", "#".repeat(filled), "-".repeat(bar_w - filled))
+    } else {
+        format!("{}{}", "█".repeat(filled), "░".repeat(bar_w - filled))
+    };
+
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(Span::styled(
+            format!(
+                "{}  {}",
+                field_label(
+                    dns.field == DnsField::Domain,
+                    "Domain",
+                    &dns.domain,
+                    dns.editing,
+                ),
+                field_label(
+                    dns.field == DnsField::Wordlist,
+                    "Wordlist",
+                    &dns.wordlist,
+                    dns.editing,
+                ),
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "{}  {}  [{}] dry-run  [{}] ct  state:{}",
+                field_label(
+                    dns.field == DnsField::Concurrency,
+                    "Conc",
+                    &dns.concurrency,
+                    dns.editing
+                ),
+                field_label(
+                    dns.field == DnsField::Timeout,
+                    "Timeout",
+                    &dns.timeout_ms,
+                    dns.editing
+                ),
+                dry,
+                ct,
+                state
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            "Enter edit  Tab fields  s start  p dry-run  c ct",
+            app.theme.muted_style(),
+        )),
+        Line::from(Span::styled(
+            format!("Progress {} {}  {}", bar, dns.progress_label(), dns.message),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!(
+                " {:<8} {:<8} {:<6} {:<22} {}",
+                "Kind", "Type", "Sev", "Name", "Value"
+            ),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    if dns.results.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "(no findings yet)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let header_rows = 6u16;
+        let inner_h = area.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(header_rows + 2) as usize;
+        let selected = dns.selected.min(dns.results.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, hit) in dns
+            .results
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(visible.max(1))
+        {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let name: String = hit.name.chars().take(22).collect();
+            let value: String = hit.value.chars().take(28).collect();
+            let row = format!(
+                "{marker}{:<8} {:<8} {:<6} {:<22} {value}",
+                hit.kind.as_str().chars().take(8).collect::<String>(),
+                hit.rtype.chars().take(8).collect::<String>(),
+                hit.severity.as_str().chars().take(6).collect::<String>(),
+                name
+            );
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(row, style)));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("Detail: {}", dns.detail_line()),
+        app.theme.muted_style(),
+    )));
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(app.theme.text_style())
+            .block(panel_block(app, " DNS ", focused)),
         area,
     );
 }
@@ -1368,6 +1512,8 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Screen::Http => format!("  s start  p dry-run  {list_hint} select"),
         Screen::Fuzz if app.fuzz.editing => "  Enter done  Tab fields".to_string(),
         Screen::Fuzz => format!("  s start  p dry-run  {list_hint} select"),
+        Screen::Dns if app.dns.editing => "  Enter done  Tab fields".to_string(),
+        Screen::Dns => format!("  s start  p dry-run  c ct  {list_hint} select"),
         _ => String::new(),
     };
     let text = format!(
@@ -1842,6 +1988,50 @@ mod tests {
         assert!(shot.contains("10.0.0.5"));
         assert!(shot.contains("admin") || shot.contains("backup"));
         assert_snapshot!("fuzz_80x24", shot);
+    }
+
+    #[test]
+    fn dns_snapshot_80x24() {
+        use keld_modules::{DnsHit, DnsKind, DnsSeverity};
+        let mut app = shell_app();
+        app.screen = Screen::Dns;
+        app.focus = FocusPane::Main;
+        app.dns.domain = "example.test".into();
+        app.dns.wordlist = "subs.txt".into();
+        app.dns.results = vec![
+            DnsHit {
+                kind: DnsKind::Record,
+                name: "example.test".into(),
+                rtype: "A".into(),
+                value: "10.0.0.5".into(),
+                severity: DnsSeverity::Info,
+                planned: false,
+            },
+            DnsHit {
+                kind: DnsKind::Axfr,
+                name: "example.test".into(),
+                rtype: "AXFR".into(),
+                value: "denied via ns.example.test; REFUSED".into(),
+                severity: DnsSeverity::Info,
+                planned: false,
+            },
+            DnsHit {
+                kind: DnsKind::Ct,
+                name: "www.example.test".into(),
+                rtype: "CT".into(),
+                value: "certificate-transparency".into(),
+                severity: DnsSeverity::Info,
+                planned: false,
+            },
+        ];
+        app.dns.done = 3;
+        app.dns.total = 4;
+        app.dns.message = "enumerating".into();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("DNS"));
+        assert!(shot.contains("example.test"));
+        assert!(shot.contains("AXFR") || shot.contains("axfr") || shot.contains("record"));
+        assert_snapshot!("dns_80x24", shot);
     }
 
     #[test]

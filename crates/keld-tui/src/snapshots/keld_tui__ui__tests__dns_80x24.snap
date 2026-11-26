@@ -1,0 +1,28 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
+┌ Nav ─┐┌ DNS ─────────────────────────────────────────────────────────────────┐
+│ Dash ││>Domain [example.test]   Wordlist [subs.txt]                          │
+│ Scan ││ Conc [20]   Timeout [5000]  [ ] dry-run  [x] ct  state:idle          │
+│ Prob ││Enter edit  Tab fields  s start  p dry-run  c ct                      │
+│ TLS  ││Progress ##################------ 75%  enumerating                    │
+│ HTTP ││                                                                      │
+│ Fuzz ││ Kind     Type     Sev    Name                   Value                │
+│*DNS  ││> record   A        info   example.test           10.0.0.5            │
+│ Net  ││ axfr     AXFR     info   example.test           denied via ns.example│
+│ Hash ││ ct       CT       info   www.example.test       certificate-transpare│
+│ Rpt  ││                                                                      │
+│ Ws   ││Detail: [info] record A example.test = 10.0.0.5                       │
+│ Jobs ││                                                                      │
+│ Aud  ││                                                                      │
+│ Set  ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+└──────┘└──────────────────────────────────────────────────────────────────────┘
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  m sidebar  s start
