@@ -708,6 +708,9 @@ dependencies = [
  "clap",
  "keld-core",
  "keld-tui",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
