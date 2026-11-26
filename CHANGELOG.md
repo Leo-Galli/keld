@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Scope model: parse/validate `scope.toml` (includes, excludes, notes); `Scope::check` refuses out-of-scope/excluded targets; `--scope` flag; TUI status bar shows active scope summary
 - Event bus (`EventBus` / `ModuleEvent`) and `Job` model in `keld-core`; stub module in `keld-modules` emits progress for TUI/CLI wiring
 - Config load: `keld.toml` < env (`KELD_*`, `NO_COLOR`) < flags; `--config` / `--theme`; first-launch authorized-use acknowledgement persisted to config
 - App shell polish: breakpoints (100 / 70 / 60x16), compact nav strip, single-pane, focus ring, `m` sidebar overlay

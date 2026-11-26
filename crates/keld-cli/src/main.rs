@@ -6,7 +6,7 @@ use std::process::ExitCode;
 
 use anyhow::Result;
 use clap::Parser;
-use keld_core::{load, ConfigOverrides, ThemeName, AUTHORIZED_USE, VERSION};
+use keld_core::{load, load_scope_optional, ConfigOverrides, ThemeName, AUTHORIZED_USE, VERSION};
 use keld_tui::{run, version_banner, ThemeId, TuiOptions};
 
 #[derive(Debug, Parser)]
@@ -24,6 +24,10 @@ struct Cli {
     /// Path to `keld.toml` (overrides discovery)
     #[arg(long = "config", value_name = "PATH")]
     config: Option<PathBuf>,
+
+    /// Path to `scope.toml` (default: ./scope.toml when present)
+    #[arg(long = "scope", value_name = "PATH")]
+    scope: Option<PathBuf>,
 
     /// Skip the splash screen
     #[arg(long)]
@@ -74,6 +78,11 @@ fn main() -> Result<ExitCode> {
         eprintln!("warning: {w}");
     }
 
+    let scope = load_scope_optional(cli.scope.as_deref()).map_err(|e| anyhow::anyhow!(e))?;
+    if scope.is_empty() {
+        eprintln!("warning: no scope loaded; active modules will refuse targets until scope.toml or --scope is set");
+    }
+
     let opts = TuiOptions {
         show_splash: loaded.config.splash,
         ascii: loaded.config.ascii,
@@ -81,6 +90,7 @@ fn main() -> Result<ExitCode> {
         theme_id: ThemeId::from_theme_name(loaded.config.theme),
         needs_ack: !loaded.config.authorized_ack,
         config_path: loaded.persist_path,
+        scope_summary: scope.summary(),
     };
 
     run(opts).map_err(|e| anyhow::anyhow!(e))?;
