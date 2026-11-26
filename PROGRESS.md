@@ -2,16 +2,18 @@
 
 ## Current task
 
-**KL-007** -- Audit log (file + API); Audit log TUI viewer (read-only)
+**KL-008** -- CLI framework: global flags, `--json`, colored output, Ctrl+C partial-save hook skeleton, `keld doctor` stub
 
 Acceptance:
-- Append-only audit log API (timestamp, module, target, parameters, outcome)
-- Persist to a local file; load for the TUI viewer
-- Read-only Audit log screen lists entries with filter/scroll
-- Unit tests for append and load
+- Global flags wired through clap (reuse existing where present)
+- `--json` on commands that emit results (stub OK where no module yet)
+- Colored human output; respects `NO_COLOR`
+- Ctrl+C hook skeleton that can save partial results later
+- `keld doctor` stub reports basic capability checks
 
 ## Done
 
+- **KL-007** -- Audit log (file + API); Audit log TUI viewer (read-only) -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/13
 - **KL-006** -- Scope model + `scope.toml` parse/validate/exclude; refuse out-of-scope; status-bar scope summary -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/11
 - **KL-005** -- Event bus + Job model in `keld-core`; stub module that emits progress for TUI/CLI wiring -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/9
 - **KL-004** -- Config load (`keld.toml` + env + flags), first-launch acknowledgement persistence -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/7
@@ -46,7 +48,6 @@ Acceptance:
 
 ### Foundation
 
-- **KL-007** -- Audit log (file + API); Audit log TUI viewer (read-only)
 - **KL-008** -- CLI framework: global flags, `--json`, colored output, Ctrl+C partial-save hook skeleton, `keld doctor` stub
 - **KL-009** -- Command palette + help overlay + keybinding presets (vim/arrows)
 - **KL-010** -- Dashboard screen with placeholder charts/sparklines; Jobs list screen
