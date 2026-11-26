@@ -3,6 +3,7 @@
 mod color;
 mod doctor;
 mod output;
+mod probe_cmd;
 mod scan_cmd;
 mod signal;
 
@@ -16,7 +17,7 @@ use keld_core::{
     default_audit_path, load, load_scope_optional, AuditLog, ConfigOverrides, ThemeName,
     AUTHORIZED_USE, VERSION,
 };
-use keld_modules::DEFAULT_TIMEOUT_MS;
+use keld_modules::{DEFAULT_PROBE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS};
 use keld_tui::{run, version_banner, ThemeId, TuiOptions};
 
 use crate::color::ColorMode;
@@ -101,6 +102,17 @@ enum Commands {
         /// Windows blocks raw TCP (Npcap is reported by `doctor`); falls back to TCP connect.
         #[arg(long)]
         syn: bool,
+    },
+    /// Banner / service detection from embedded signatures
+    Probe {
+        /// Host or IP in scope
+        target: String,
+        /// Ports: `22`, `80,443`, `1-1024`, `top`, `top1000` (default: top)
+        #[arg(short, long, default_value = "top")]
+        ports: String,
+        /// Connect and read timeout in milliseconds
+        #[arg(long, default_value_t = DEFAULT_PROBE_TIMEOUT_MS)]
+        timeout: u64,
     },
 }
 
@@ -188,6 +200,29 @@ fn main() -> Result<ExitCode> {
             .map_err(|e| anyhow::anyhow!(e))?;
             Ok(ExitCode::from(code))
         }
+        Some(Commands::Probe {
+            target,
+            ports,
+            timeout,
+        }) => {
+            let mut audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
+            let code = probe_cmd::run(
+                probe_cmd::ProbeArgs {
+                    target,
+                    ports,
+                    timeout_ms: timeout,
+                    concurrency: cli.concurrency.unwrap_or(0),
+                    dry_run: cli.dry_run,
+                    rate: cli.rate,
+                    json: cli.json,
+                    color,
+                },
+                &scope,
+                &mut audit,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            Ok(ExitCode::from(code))
+        }
         None => {
             let audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
 
@@ -232,8 +267,37 @@ mod tests {
         let help = String::from_utf8(help).unwrap();
         assert!(help.contains("doctor") || help.contains("Doctor"));
         assert!(help.contains("scan") || help.contains("Scan"));
+        assert!(help.contains("probe") || help.contains("Probe"));
         assert!(help.contains("--json"));
         assert!(help.contains("--dry-run"));
+    }
+
+    #[test]
+    fn parses_probe_with_ports() {
+        let cli = Cli::try_parse_from([
+            "keld",
+            "--dry-run",
+            "probe",
+            "127.0.0.1",
+            "--ports",
+            "22,80",
+            "--timeout",
+            "1500",
+        ])
+        .unwrap();
+        assert!(cli.dry_run);
+        match cli.command {
+            Some(Commands::Probe {
+                target,
+                ports,
+                timeout,
+            }) => {
+                assert_eq!(target, "127.0.0.1");
+                assert_eq!(ports, "22,80");
+                assert_eq!(timeout, 1500);
+            }
+            other => panic!("expected Probe, got {other:?}"),
+        }
     }
 
     #[test]

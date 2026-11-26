@@ -9,6 +9,7 @@ use ratatui::Frame;
 use crate::app::{App, FocusPane, Overlay, Phase};
 use crate::dashboard::{self, severity_label};
 use crate::logo::{self, WORDMARK};
+use crate::probe_view::ProbeField;
 use crate::scan_view::ScanField;
 use crate::screen::Screen;
 
@@ -304,6 +305,7 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, fo
         Screen::Dashboard => draw_dashboard(frame, area, app, single_pane, focused),
         Screen::Jobs => draw_jobs(frame, area, app, focused),
         Screen::Scan => draw_scan(frame, area, app, focused),
+        Screen::Probe => draw_probe(frame, area, app, focused),
         _ => {
             let title = format!(" {} ", app.screen.title());
             frame.render_widget(
@@ -467,6 +469,156 @@ fn draw_scan(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
         Paragraph::new(lines)
             .style(app.theme.text_style())
             .block(panel_block(app, " Scan ", focused)),
+        area,
+    );
+}
+
+fn draw_probe(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
+    let probe = &app.probe;
+    let dry = if probe.dry_run { "x" } else { " " };
+    let state = match probe.run_state {
+        crate::probe_view::ProbeRunState::Idle => "idle",
+        crate::probe_view::ProbeRunState::Running => "running",
+        crate::probe_view::ProbeRunState::Done => "done",
+        crate::probe_view::ProbeRunState::Failed => "failed",
+    };
+    let bar_w = (area.width.saturating_sub(28) as usize).clamp(8, 24);
+    let frac = probe.progress_fraction().unwrap_or(0.0);
+    let filled = ((frac * bar_w as f64).round() as usize).min(bar_w);
+    let bar = if app.ascii {
+        format!("{}{}", "#".repeat(filled), "-".repeat(bar_w - filled))
+    } else {
+        format!("{}{}", "█".repeat(filled), "░".repeat(bar_w - filled))
+    };
+
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(Span::styled(
+            format!(
+                "{}  {}",
+                field_label(
+                    probe.field == ProbeField::Target,
+                    "Target",
+                    &probe.target,
+                    probe.editing
+                ),
+                field_label(
+                    probe.field == ProbeField::Ports,
+                    "Ports",
+                    &probe.ports,
+                    probe.editing
+                )
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "{}  {}  [{}] dry-run  state:{}",
+                field_label(
+                    probe.field == ProbeField::Concurrency,
+                    "Concurrency",
+                    &probe.concurrency,
+                    probe.editing
+                ),
+                field_label(
+                    probe.field == ProbeField::Timeout,
+                    "Timeout",
+                    &probe.timeout_ms,
+                    probe.editing
+                ),
+                dry,
+                state
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            "Enter edit  Tab fields  s start  p dry-run",
+            app.theme.muted_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "Progress {} {}  {}",
+                bar,
+                probe.progress_label(),
+                probe.message
+            ),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!(
+                " {:<14} {:>5} {:<10} {:<10}",
+                "Host", "Port", "Service", "Product"
+            ),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    if probe.results.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "(no results yet)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let header_rows = 6u16;
+        let inner_h = area.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(header_rows + 2) as usize;
+        let selected = probe.selected.min(probe.results.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, hit) in probe
+            .results
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(visible.max(1))
+        {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let service = if hit.planned {
+                "planned"
+            } else {
+                hit.service.as_str()
+            };
+            let product = if hit.planned {
+                hit.probe_name.as_str()
+            } else {
+                hit.product.as_str()
+            };
+            let row = format!(
+                "{marker}{:<14} {:>5} {:<10} {:<10}",
+                hit.host, hit.port, service, product
+            );
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(row, style)));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("Detail: {}", probe.detail_line()),
+        app.theme.muted_style(),
+    )));
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(app.theme.text_style())
+            .block(panel_block(app, " Probe ", focused)),
         area,
     );
 }
@@ -765,6 +917,8 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Screen::Jobs => format!("  {list_hint} select"),
         Screen::Scan if app.scan.editing => "  Enter done  Tab fields".to_string(),
         Screen::Scan => format!("  s start  p dry-run  y syn  {list_hint} select"),
+        Screen::Probe if app.probe.editing => "  Enter done  Tab fields".to_string(),
+        Screen::Probe => format!("  s start  p dry-run  {list_hint} select"),
         _ => String::new(),
     };
     let text = format!(
@@ -1077,6 +1231,45 @@ mod tests {
         assert!(shot.contains("22"));
         assert!(shot.contains("open") || shot.contains("Open"));
         assert_snapshot!("scan_80x24", shot);
+    }
+
+    #[test]
+    fn probe_snapshot_80x24() {
+        use keld_modules::ProbeHit;
+        let mut app = shell_app();
+        app.screen = Screen::Probe;
+        app.focus = FocusPane::Main;
+        app.probe.target = "10.0.0.5".into();
+        app.probe.ports = "22,80".into();
+        app.probe.results = vec![
+            ProbeHit {
+                host: "10.0.0.5".into(),
+                port: 22,
+                service: "ssh".into(),
+                product: "ssh".into(),
+                banner: "SSH-2.0-OpenSSH_9.6".into(),
+                probe_name: "null".into(),
+                planned: false,
+            },
+            ProbeHit {
+                host: "10.0.0.5".into(),
+                port: 80,
+                service: "http".into(),
+                product: "http".into(),
+                banner: "HTTP/1.0 200 OK".into(),
+                probe_name: "httpget".into(),
+                planned: false,
+            },
+        ];
+        app.probe.done = 2;
+        app.probe.total = 2;
+        app.probe.message = "probing".into();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Probe"));
+        assert!(shot.contains("10.0.0.5"));
+        assert!(shot.contains("ssh"));
+        assert!(shot.contains("http"));
+        assert_snapshot!("probe_80x24", shot);
     }
 
     #[test]

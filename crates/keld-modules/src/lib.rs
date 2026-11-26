@@ -9,15 +9,22 @@ use std::pin::Pin;
 use keld_core::{EventSender, JobId, ModuleKind};
 
 pub mod ports;
+pub mod probe;
 pub mod scan;
+pub mod signatures;
 pub mod stub;
 pub mod syn_path;
 
 pub use ports::{parse_ports, PortParseError, MAX_PORTS, TOP_100};
+pub use probe::{
+    parse_probe_summary, ProbeConfig, ProbeError, ProbeHit, ProbeModule, DEFAULT_PROBE_CONCURRENCY,
+    DEFAULT_PROBE_TIMEOUT_MS,
+};
 pub use scan::{
     PortHit, PortState, ScanConfig, ScanError, ScanModule, ScanReport, DEFAULT_CONCURRENCY,
     DEFAULT_TIMEOUT_MS,
 };
+pub use signatures::{SignatureDb, SignatureError, EMBEDDED_SIGNATURES};
 pub use stub::StubModule;
 pub use syn_path::{decide, ScanTechnique, SynAvailability, TechniqueDecision};
 
@@ -34,9 +41,9 @@ pub trait Module: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 }
 
-/// Registered modules available to CLI/TUI wiring (stub + scan).
+/// Registered modules available to CLI/TUI wiring (stub + scan + probe).
 pub fn module_count() -> usize {
-    2
+    3
 }
 
 /// Build the stub used for event-bus wiring tests and early UI demos.
@@ -50,8 +57,8 @@ mod tests {
     use keld_core::{EventBus, Job, JobState, ModuleEvent};
 
     #[test]
-    fn registry_lists_stub_and_scan() {
-        assert_eq!(module_count(), 2);
+    fn registry_lists_stub_scan_and_probe() {
+        assert_eq!(module_count(), 3);
         assert_eq!(stub_module().kind(), ModuleKind::Stub);
         assert_eq!(
             ScanModule::new(
@@ -60,6 +67,14 @@ mod tests {
             )
             .kind(),
             ModuleKind::Scan
+        );
+        assert_eq!(
+            ProbeModule::new(
+                ProbeConfig::from_parts("127.0.0.1", "22", 100, 1, true, None).unwrap(),
+                keld_core::Scope::empty(),
+            )
+            .kind(),
+            ModuleKind::Probe
         );
     }
 
