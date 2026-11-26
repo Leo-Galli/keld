@@ -2,10 +2,11 @@
 
 ## Current task
 
-**KL-017** -- `dns`: records, AXFR check, wordlist + CT subdomains; CLI + TUI + tests
+**KL-018** -- `net`: interfaces + authorized subnet discovery (ARP/ICMP/TCP fallback); CLI + TUI + tests
 
 ## Done
 
+- **KL-017** -- `dns`: records, AXFR check, wordlist + CT subdomains; CLI + TUI + tests -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/34
 - **KL-016** -- `fuzz`: dir + vhost wordlist discovery, filters; CLI + TUI + tests -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/31
 - **KL-015** -- `http`: headers, cookies, CORS, fingerprint, robots/sitemap; CLI + TUI + tests -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/29
 - **KL-014** -- `tls`: chain, expiry, protocols, weak ciphers, HSTS; CLI + TUI + tests -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/27
@@ -33,6 +34,7 @@
 
 ## Decisions log
 
+- 2026-11-26: DNS uses hickory-resolver 0.26 (system or injected resolvers) for A/AAAA/MX/NS/TXT/CNAME/SOA; AXFR is a raw TCP length-prefixed probe (no hickory-client; still alpha) reporting OPEN as high / REFUSED as info; wordlist optional (`-w`); CT via crt.sh JSON (`--ct` default on, `--no-ct` off) with injectable `ct_base_url` for tests; TUI DNS reuses `s`/`p` and toggles CT with `c`
 - 2026-11-26: Fuzz uses reqwest 0.13 with rustls; modes `dir` (path append) and `vhost` (`Host: {word}.{apex}`); default filter status 404; match-status overrides filter when set; filter-size hides body sizes; no redirects; wordlist skips blanks and `#` comments; dry-run plans each word; TUI Fuzz reuses `s`/`p`
 - 2026-11-26: HTTP uses reqwest 0.13 with rustls (no OpenSSL). Target is URL or host (https default); scope check on host. Audit steps: GET primary (headers/cookies/CORS/fingerprint), OPTIONS CORS probe with synthetic Origin, GET /robots.txt and /sitemap.xml. Cookie flags Secure/HttpOnly/SameSite; missing security headers severity medium/low. TUI HTTP reuses `s`/`p`; field-edit routing fixed for Probe/TLS/HTTP
 - 2026-11-26: TLS uses rustls + tokio-rustls + webpki-roots + x509-parser (no OpenSSL). Inspect handshake accepts any chain to collect metadata; separate webpki verify finding; protocol probe is TLS 1.2/1.3 only (client does not offer TLS 1.0/1.1); weak-cipher report classifies the negotiated suite (RC4/DES/NULL weak, CBC/RSA-kx medium); HSTS via HTTPS GET after handshake. Default port `443`. TUI TLS reuses `s`/`p`; also fixed Probe/TLS key wiring in `run.rs`
@@ -59,7 +61,6 @@
 
 ### Modules
 
-- **KL-017** -- `dns`: records, AXFR check, wordlist + CT subdomains; CLI + TUI + tests
 - **KL-018** -- `net`: interfaces + authorized subnet discovery (ARP/ICMP/TCP fallback); CLI + TUI + tests
 - **KL-019** -- `hash`: type ID + offline wordlist check; CLI + TUI + tests
 
