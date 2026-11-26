@@ -148,13 +148,15 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
             app.probe.editing,
             app.tls.editing,
             app.http.editing,
-            app.fuzz.editing
+            app.fuzz.editing,
+            app.dns.editing
         ),
-        (Screen::Scan, true, _, _, _, _)
-            | (Screen::Probe, _, true, _, _, _)
-            | (Screen::Tls, _, _, true, _, _)
-            | (Screen::Http, _, _, _, true, _)
-            | (Screen::Fuzz, _, _, _, _, true)
+        (Screen::Scan, true, _, _, _, _, _)
+            | (Screen::Probe, _, true, _, _, _, _)
+            | (Screen::Tls, _, _, true, _, _, _)
+            | (Screen::Http, _, _, _, true, _, _)
+            | (Screen::Fuzz, _, _, _, _, true, _)
+            | (Screen::Dns, _, _, _, _, _, true)
     );
     if module_editing {
         return match code {
@@ -177,7 +179,12 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         KeyCode::Char('s')
             if matches!(
                 app.screen,
-                Screen::Scan | Screen::Probe | Screen::Tls | Screen::Http | Screen::Fuzz
+                Screen::Scan
+                    | Screen::Probe
+                    | Screen::Tls
+                    | Screen::Http
+                    | Screen::Fuzz
+                    | Screen::Dns
             ) =>
         {
             return Some(KeyAction::ScanStart);
@@ -185,13 +192,21 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         KeyCode::Char('p')
             if matches!(
                 app.screen,
-                Screen::Scan | Screen::Probe | Screen::Tls | Screen::Http | Screen::Fuzz
+                Screen::Scan
+                    | Screen::Probe
+                    | Screen::Tls
+                    | Screen::Http
+                    | Screen::Fuzz
+                    | Screen::Dns
             ) =>
         {
             return Some(KeyAction::ScanToggleDryRun);
         }
         KeyCode::Char('y') if app.screen == Screen::Scan => {
             return Some(KeyAction::ScanToggleSyn);
+        }
+        KeyCode::Char('c') if app.screen == Screen::Dns => {
+            return Some(KeyAction::DnsToggleCt);
         }
         KeyCode::Char('/') if app.screen == Screen::AuditLog => {
             return Some(KeyAction::BeginFilter);
@@ -247,12 +262,14 @@ fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) ->
             | Screen::Tls
             | Screen::Http
             | Screen::Fuzz
+            | Screen::Dns
     ) && (!dual || app.focus == FocusPane::Main)
         && !(app.screen == Screen::Scan && app.scan.editing)
         && !(app.screen == Screen::Probe && app.probe.editing)
         && !(app.screen == Screen::Tls && app.tls.editing)
         && !(app.screen == Screen::Http && app.http.editing)
-        && !(app.screen == Screen::Fuzz && app.fuzz.editing);
+        && !(app.screen == Screen::Fuzz && app.fuzz.editing)
+        && !(app.screen == Screen::Dns && app.dns.editing);
     let audit_list = app.screen == Screen::AuditLog && main_list;
     let sidebar_nav = !dual || app.focus == FocusPane::Sidebar;
 

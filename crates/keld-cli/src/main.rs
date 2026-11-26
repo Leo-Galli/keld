@@ -1,6 +1,7 @@
 //! `keld` binary: no args opens the TUI; subcommands run the CLI.
 
 mod color;
+mod dns_cmd;
 mod doctor;
 mod fuzz_cmd;
 mod http_cmd;
@@ -21,8 +22,8 @@ use keld_core::{
     AUTHORIZED_USE, VERSION,
 };
 use keld_modules::{
-    DEFAULT_FUZZ_TIMEOUT_MS, DEFAULT_HTTP_TIMEOUT_MS, DEFAULT_PROBE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS,
-    DEFAULT_TLS_TIMEOUT_MS,
+    DEFAULT_DNS_TIMEOUT_MS, DEFAULT_FUZZ_TIMEOUT_MS, DEFAULT_HTTP_TIMEOUT_MS,
+    DEFAULT_PROBE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, DEFAULT_TLS_TIMEOUT_MS,
 };
 use keld_tui::{run, version_banner, ThemeId, TuiOptions};
 
@@ -160,6 +161,23 @@ enum Commands {
         filter_size: String,
         /// Request timeout in milliseconds
         #[arg(long, default_value_t = DEFAULT_FUZZ_TIMEOUT_MS)]
+        timeout: u64,
+    },
+    /// DNS records, AXFR check, wordlist and CT subdomain discovery
+    Dns {
+        /// Domain in scope
+        domain: String,
+        /// Optional subdomain wordlist (`#` comments skipped)
+        #[arg(short, long, value_name = "PATH")]
+        wordlist: Option<PathBuf>,
+        /// Query Certificate Transparency (crt.sh); default on
+        #[arg(long, default_value_t = true)]
+        ct: bool,
+        /// Disable Certificate Transparency lookup
+        #[arg(long = "no-ct")]
+        no_ct: bool,
+        /// Lookup / HTTP timeout in milliseconds
+        #[arg(long, default_value_t = DEFAULT_DNS_TIMEOUT_MS)]
         timeout: u64,
     },
 }
@@ -343,6 +361,32 @@ fn main() -> Result<ExitCode> {
             .map_err(|e| anyhow::anyhow!(e))?;
             Ok(ExitCode::from(code))
         }
+        Some(Commands::Dns {
+            domain,
+            wordlist,
+            ct,
+            no_ct,
+            timeout,
+        }) => {
+            let mut audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
+            let code = dns_cmd::run(
+                dns_cmd::DnsArgs {
+                    domain,
+                    wordlist,
+                    ct: ct && !no_ct,
+                    timeout_ms: timeout,
+                    concurrency: cli.concurrency.unwrap_or(0),
+                    dry_run: cli.dry_run,
+                    rate: cli.rate,
+                    json: cli.json,
+                    color,
+                },
+                &scope,
+                &mut audit,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            Ok(ExitCode::from(code))
+        }
         None => {
             let audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
 
@@ -391,8 +435,43 @@ mod tests {
         assert!(help.contains("tls") || help.contains("Tls") || help.contains("TLS"));
         assert!(help.contains("http") || help.contains("Http") || help.contains("HTTP"));
         assert!(help.contains("fuzz") || help.contains("Fuzz"));
+        assert!(help.contains("dns") || help.contains("Dns") || help.contains("DNS"));
         assert!(help.contains("--json"));
         assert!(help.contains("--dry-run"));
+    }
+
+    #[test]
+    fn parses_dns_domain() {
+        let cli = Cli::try_parse_from([
+            "keld",
+            "--dry-run",
+            "dns",
+            "example.test",
+            "-w",
+            "subs.txt",
+            "--no-ct",
+            "--timeout",
+            "2500",
+        ])
+        .unwrap();
+        assert!(cli.dry_run);
+        match cli.command {
+            Some(Commands::Dns {
+                domain,
+                wordlist,
+                ct,
+                no_ct,
+                timeout,
+            }) => {
+                assert_eq!(domain, "example.test");
+                assert_eq!(wordlist, Some(PathBuf::from("subs.txt")));
+                assert!(ct);
+                assert!(no_ct);
+                assert!(!(ct && !no_ct));
+                assert_eq!(timeout, 2500);
+            }
+            other => panic!("expected Dns, got {other:?}"),
+        }
     }
 
     #[test]

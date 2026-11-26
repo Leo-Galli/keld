@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `keld dns`: record enumeration (A/AAAA/MX/NS/TXT/CNAME/SOA), AXFR check against NS, optional wordlist subdomain brute, Certificate Transparency via crt.sh (`--ct` / `--no-ct`); scope-gated; audit logged; `--dry-run` / `--json` / `--rate` / `--concurrency`; TUI DNS screen with form, progress, and findings table (hickory-resolver + rustls HTTP)
 - `keld fuzz`: directory and virtual-host discovery from wordlists; status/size filters; scope-gated; audit logged; `--dry-run` / `--json` / `--rate` / `--concurrency`; TUI Fuzz screen with form, progress, and hits table (reqwest + rustls)
 - `keld http`: security headers, cookie flags, CORS (GET + OPTIONS probe), tech fingerprint hints, robots.txt and sitemap.xml; scope-gated; audit logged; `--dry-run` / `--json` / `--rate` / `--concurrency`; TUI HTTP screen with findings table (reqwest + rustls)
 - `keld tls`: certificate chain, expiry, TLS 1.2/1.3 offer checks, negotiated cipher strength, webpki verify status, and HSTS via HTTPS GET; scope-gated; audit logged; `--dry-run` / `--json` / `--rate` / `--concurrency`; TUI TLS screen with findings table
