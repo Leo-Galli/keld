@@ -11,6 +11,7 @@ pub mod scan_view;
 pub mod screen;
 pub mod symbols;
 pub mod theme;
+pub mod tls_view;
 pub mod ui;
 
 pub use app::{App, FocusPane, Overlay, TuiOptions};

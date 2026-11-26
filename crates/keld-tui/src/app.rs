@@ -12,6 +12,7 @@ use crate::scan_view::{ScanRunState, ScanView};
 use crate::screen::Screen;
 use crate::symbols::Symbols;
 use crate::theme::{Theme, ThemeId};
+use crate::tls_view::{TlsRunState, TlsView};
 
 /// Runtime options shared with the CLI.
 #[derive(Debug, Clone)]
@@ -131,6 +132,8 @@ pub struct App {
     pub scan: ScanView,
     /// Probe module form + results.
     pub probe: ProbeView,
+    /// TLS module form + findings.
+    pub tls: TlsView,
     /// Tick accumulator so job elapsed advances ~1s even at 30 FPS.
     tick_accum: u32,
 }
@@ -176,6 +179,7 @@ impl App {
             job_selected: 0,
             scan: ScanView::default(),
             probe: ProbeView::default(),
+            tls: TlsView::default(),
             tick_accum: 0,
         }
     }
@@ -187,6 +191,7 @@ impl App {
         }
         self.scan.poll();
         self.probe.poll();
+        self.tls.poll();
         // ~30 FPS tick; advance job clocks once per ~30 ticks (~1s).
         self.tick_accum = self.tick_accum.saturating_add(1);
         if self.tick_accum < 30 {
@@ -218,12 +223,27 @@ impl App {
         }
     }
 
+    pub fn start_tls(&mut self) {
+        match self.tls.start(&self.scope) {
+            Ok(()) => {}
+            Err(e) => {
+                self.tls.error = Some(e.clone());
+                self.tls.message = e;
+                self.tls.run_state = TlsRunState::Failed;
+            }
+        }
+    }
+
     pub fn toggle_scan_dry_run(&mut self) {
         self.scan.dry_run = !self.scan.dry_run;
     }
 
     pub fn toggle_probe_dry_run(&mut self) {
         self.probe.dry_run = !self.probe.dry_run;
+    }
+
+    pub fn toggle_tls_dry_run(&mut self) {
+        self.tls.dry_run = !self.tls.dry_run;
     }
 
     pub fn toggle_scan_syn(&mut self) {
@@ -244,6 +264,14 @@ impl App {
 
     pub fn probe_prev_field(&mut self) {
         self.probe.field = self.probe.field.prev();
+    }
+
+    pub fn tls_next_field(&mut self) {
+        self.tls.field = self.tls.field.next();
+    }
+
+    pub fn tls_prev_field(&mut self) {
+        self.tls.field = self.tls.field.prev();
     }
 
     pub fn job_select_next(&mut self) {
@@ -587,6 +615,19 @@ impl App {
             return;
         }
 
+        if self.tls.editing && self.screen == Screen::Tls {
+            match key {
+                KeyAction::Quit | KeyAction::CloseOverlay => self.tls.editing = false,
+                KeyAction::Activate | KeyAction::EndFilter => self.tls.editing = false,
+                KeyAction::FilterBackspace => self.tls.field_backspace(),
+                KeyAction::FilterChar(c) => self.tls.field_push(c),
+                KeyAction::NextFocus => self.tls_next_field(),
+                KeyAction::PrevFocus => self.tls_prev_field(),
+                _ => {}
+            }
+            return;
+        }
+
         if !matches!(key, KeyAction::ChordG) {
             self.pending_g = false;
         }
@@ -611,6 +652,8 @@ impl App {
                     self.scan_next_field();
                 } else if self.screen == Screen::Probe && self.focus == FocusPane::Main {
                     self.probe_next_field();
+                } else if self.screen == Screen::Tls && self.focus == FocusPane::Main {
+                    self.tls_next_field();
                 } else {
                     self.cycle_focus(true);
                 }
@@ -620,6 +663,8 @@ impl App {
                     self.scan_prev_field();
                 } else if self.screen == Screen::Probe && self.focus == FocusPane::Main {
                     self.probe_prev_field();
+                } else if self.screen == Screen::Tls && self.focus == FocusPane::Main {
+                    self.tls_prev_field();
                 } else {
                     self.cycle_focus(false);
                 }
@@ -630,11 +675,15 @@ impl App {
             }
             KeyAction::ScanStart if self.screen == Screen::Scan => self.start_scan(),
             KeyAction::ScanStart if self.screen == Screen::Probe => self.start_probe(),
+            KeyAction::ScanStart if self.screen == Screen::Tls => self.start_tls(),
             KeyAction::ScanToggleDryRun if self.screen == Screen::Scan => {
                 self.toggle_scan_dry_run();
             }
             KeyAction::ScanToggleDryRun if self.screen == Screen::Probe => {
                 self.toggle_probe_dry_run();
+            }
+            KeyAction::ScanToggleDryRun if self.screen == Screen::Tls => {
+                self.toggle_tls_dry_run();
             }
             KeyAction::ScanToggleSyn if self.screen == Screen::Scan => {
                 self.toggle_scan_syn();
@@ -646,6 +695,9 @@ impl App {
                 if self.screen == Screen::Probe && self.focus == FocusPane::Main =>
             {
                 self.probe.editing = true;
+            }
+            KeyAction::Activate if self.screen == Screen::Tls && self.focus == FocusPane::Main => {
+                self.tls.editing = true;
             }
             KeyAction::ListNext if self.audit_list_nav() => self.audit_select_next(),
             KeyAction::ListPrev if self.audit_list_nav() => self.audit_select_prev(),
@@ -661,6 +713,8 @@ impl App {
             KeyAction::ListPrev if self.scan_list_nav() => self.scan.select_prev(),
             KeyAction::ListNext if self.probe_list_nav() => self.probe.select_next(),
             KeyAction::ListPrev if self.probe_list_nav() => self.probe.select_prev(),
+            KeyAction::ListNext if self.tls_list_nav() => self.tls.select_next(),
+            KeyAction::ListPrev if self.tls_list_nav() => self.tls.select_prev(),
             KeyAction::ChordG if self.key_preset == KeyPreset::Vim => {
                 if self.pending_g {
                     if self.audit_list_nav() {
@@ -708,6 +762,10 @@ impl App {
 
     fn probe_list_nav(&self) -> bool {
         self.screen == Screen::Probe && self.focus == FocusPane::Main && !self.probe.editing
+    }
+
+    fn tls_list_nav(&self) -> bool {
+        self.screen == Screen::Tls && self.focus == FocusPane::Main && !self.tls.editing
     }
 }
 
