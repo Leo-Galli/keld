@@ -11,6 +11,7 @@ repository.workspace = true
 [dependencies]
 keld-core.workspace = true
 regex.workspace = true
+reqwest.workspace = true
 rustls.workspace = true
 socket2.workspace = true
 thiserror.workspace = true
@@ -21,4 +22,4 @@ x509-parser.workspace = true
 
 [dev-dependencies]
 rcgen.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util"] }

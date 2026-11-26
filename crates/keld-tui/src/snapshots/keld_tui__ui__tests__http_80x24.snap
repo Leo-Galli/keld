@@ -1,0 +1,28 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
+┌ Nav ─┐┌ HTTP ────────────────────────────────────────────────────────────────┐
+│ Dash ││>Target [https://10.0.0.5/]                                           │
+│ Scan ││ Concurrency [4]   Timeout [8000]  [ ] dry-run  state:idle            │
+│ Prob ││Enter edit  Tab fields  s start  p dry-run                            │
+│ TLS  ││Progress ######################## 100%  auditing                      │
+│*HTTP ││                                                                      │
+│ Fuzz ││ Sev      Kind       Detail                                           │
+│ DNS  ││> medium   header     content-security-policy=missing                 │
+│ Net  ││ medium   cookie     sid missing Secure; missing HttpOnly             │
+│ Hash ││ info     robots     status=200 disallow_rules=1                      │
+│ Rpt  ││                                                                      │
+│ Ws   ││Detail: https://10.0.0.5/ [medium] header -- content-security-policy=m│
+│ Jobs ││                                                                      │
+│ Aud  ││                                                                      │
+│ Set  ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+└──────┘└──────────────────────────────────────────────────────────────────────┘
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  m sidebar  s start

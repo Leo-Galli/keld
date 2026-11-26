@@ -8,6 +8,7 @@ use ratatui::Frame;
 
 use crate::app::{App, FocusPane, Overlay, Phase};
 use crate::dashboard::{self, severity_label};
+use crate::http_view::HttpField;
 use crate::logo::{self, WORDMARK};
 use crate::probe_view::ProbeField;
 use crate::scan_view::ScanField;
@@ -308,6 +309,7 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, fo
         Screen::Scan => draw_scan(frame, area, app, focused),
         Screen::Probe => draw_probe(frame, area, app, focused),
         Screen::Tls => draw_tls(frame, area, app, focused),
+        Screen::Http => draw_http(frame, area, app, focused),
         _ => {
             let title = format!(" {} ", app.screen.title());
             frame.render_widget(
@@ -607,6 +609,138 @@ fn draw_tls(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
         Paragraph::new(lines)
             .style(app.theme.text_style())
             .block(panel_block(app, " TLS ", focused)),
+        area,
+    );
+}
+
+fn draw_http(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
+    let http = &app.http;
+    let dry = if http.dry_run { "x" } else { " " };
+    let state = match http.run_state {
+        crate::http_view::HttpRunState::Idle => "idle",
+        crate::http_view::HttpRunState::Running => "running",
+        crate::http_view::HttpRunState::Done => "done",
+        crate::http_view::HttpRunState::Failed => "failed",
+    };
+    let bar_w = (area.width.saturating_sub(28) as usize).clamp(8, 24);
+    let frac = http.progress_fraction().unwrap_or(0.0);
+    let filled = ((frac * bar_w as f64).round() as usize).min(bar_w);
+    let bar = if app.ascii {
+        format!("{}{}", "#".repeat(filled), "-".repeat(bar_w - filled))
+    } else {
+        format!("{}{}", "█".repeat(filled), "░".repeat(bar_w - filled))
+    };
+
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(Span::styled(
+            field_label(
+                http.field == HttpField::Target,
+                "Target",
+                &http.target,
+                http.editing,
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "{}  {}  [{}] dry-run  state:{}",
+                field_label(
+                    http.field == HttpField::Concurrency,
+                    "Concurrency",
+                    &http.concurrency,
+                    http.editing
+                ),
+                field_label(
+                    http.field == HttpField::Timeout,
+                    "Timeout",
+                    &http.timeout_ms,
+                    http.editing
+                ),
+                dry,
+                state
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            "Enter edit  Tab fields  s start  p dry-run",
+            app.theme.muted_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "Progress {} {}  {}",
+                bar,
+                http.progress_label(),
+                http.message
+            ),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!(" {:<8} {:<10} {}", "Sev", "Kind", "Detail"),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    if http.results.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "(no findings yet)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let header_rows = 6u16;
+        let inner_h = area.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(header_rows + 2) as usize;
+        let selected = http.selected.min(http.results.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, hit) in http
+            .results
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(visible.max(1))
+        {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let sev = if hit.planned {
+                "plan"
+            } else {
+                hit.severity.as_str()
+            };
+            let kind = hit.kind.as_str();
+            let detail: String = hit.detail.chars().take(48).collect();
+            let row = format!("{marker}{sev:<8} {kind:<10} {detail}");
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(row, style)));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("Detail: {}", http.detail_line()),
+        app.theme.muted_style(),
+    )));
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(app.theme.text_style())
+            .block(panel_block(app, " HTTP ", focused)),
         area,
     );
 }
@@ -1059,6 +1193,8 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Screen::Probe => format!("  s start  p dry-run  {list_hint} select"),
         Screen::Tls if app.tls.editing => "  Enter done  Tab fields".to_string(),
         Screen::Tls => format!("  s start  p dry-run  {list_hint} select"),
+        Screen::Http if app.http.editing => "  Enter done  Tab fields".to_string(),
+        Screen::Http => format!("  s start  p dry-run  {list_hint} select"),
         _ => String::new(),
     };
     let text = format!(
@@ -1454,6 +1590,46 @@ mod tests {
         assert!(shot.contains("10.0.0.5"));
         assert!(shot.contains("expiry") || shot.contains("hsts"));
         assert_snapshot!("tls_80x24", shot);
+    }
+
+    #[test]
+    fn http_snapshot_80x24() {
+        use keld_modules::{HttpFinding, HttpSeverity};
+        let mut app = shell_app();
+        app.screen = Screen::Http;
+        app.focus = FocusPane::Main;
+        app.http.target = "https://10.0.0.5/".into();
+        app.http.results = vec![
+            HttpFinding {
+                url: "https://10.0.0.5/".into(),
+                severity: HttpSeverity::Medium,
+                kind: "header".into(),
+                detail: "content-security-policy=missing".into(),
+                planned: false,
+            },
+            HttpFinding {
+                url: "https://10.0.0.5/".into(),
+                severity: HttpSeverity::Medium,
+                kind: "cookie".into(),
+                detail: "sid missing Secure; missing HttpOnly".into(),
+                planned: false,
+            },
+            HttpFinding {
+                url: "https://10.0.0.5/robots.txt".into(),
+                severity: HttpSeverity::Info,
+                kind: "robots".into(),
+                detail: "status=200 disallow_rules=1".into(),
+                planned: false,
+            },
+        ];
+        app.http.done = 4;
+        app.http.total = 4;
+        app.http.message = "auditing".into();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("HTTP"));
+        assert!(shot.contains("10.0.0.5"));
+        assert!(shot.contains("header") || shot.contains("cookie"));
+        assert_snapshot!("http_80x24", shot);
     }
 
     #[test]
