@@ -3,6 +3,13 @@
 //! Modules, CLI and TUI build on this crate. Active scanning logic lives in
 //! `keld-modules`; this crate stays free of network I/O for now.
 
+pub mod config;
+
+pub use config::{
+    load, merge, persist_authorized_ack, project_config_path, save, user_config_path, Config,
+    ConfigError, ConfigFile, ConfigOverrides, ConfigWarning, LoadedConfig, ThemeName,
+};
+
 /// Crate version string (workspace package version).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -16,6 +23,10 @@ pub const TAGLINE: &str = "recon . audit . report";
 pub const AUTHORIZED_USE: &str =
     "Keld is for systems you own or are explicitly authorized to test. \
 Unauthorized scanning may be illegal.";
+
+/// Checkbox line on the first-launch acknowledgement screen.
+pub const AUTHORIZED_ACK_PROMPT: &str =
+    "I understand and will only use Keld on authorized targets.";
 
 #[cfg(test)]
 mod tests {

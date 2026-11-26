@@ -34,6 +34,8 @@ Also available from [GitHub Releases](https://github.com/Leo-Galli/keld/releases
 keld
 keld --no-splash
 keld --ascii
+keld --config path/to/keld.toml
+keld --theme light
 
 # CLI
 keld --help

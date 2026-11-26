@@ -1,0 +1,28 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+┌KELD  acknowledge authorized use──────────────────────────────────────────────┐
+│                                                                              │
+│Keld is for systems you own or are explicitly authorized to test. Unauthorized│
+│scanning may be illegal.                                                      │
+│                                                                              │
+│[ ] I understand and will only use Keld on authorized targets.                │
+│                                                                              │
+│Space toggle   Enter confirm   Esc quit                                       │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘

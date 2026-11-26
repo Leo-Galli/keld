@@ -109,6 +109,15 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         };
     }
 
+    if app.phase == Phase::Acknowledge {
+        return match code {
+            KeyCode::Char('q') | KeyCode::Esc => Some(KeyAction::Quit),
+            KeyCode::Char(' ') => Some(KeyAction::ToggleAck),
+            KeyCode::Enter => Some(KeyAction::ConfirmAck),
+            _ => None,
+        };
+    }
+
     let dual = sidebar_visible(app, width);
     match code {
         KeyCode::Char('q') | KeyCode::Esc => Some(KeyAction::Quit),
