@@ -5,7 +5,8 @@ use std::thread;
 
 use keld_core::{EventBus, JobId, ModuleEvent, Scope};
 use keld_modules::{
-    PortHit, PortState, ScanConfig, ScanModule, DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_MS,
+    PortHit, PortState, ScanConfig, ScanModule, ScanTechnique, SynAvailability,
+    DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_MS,
 };
 
 /// Which form field owns text input.
@@ -54,6 +55,7 @@ pub enum ScanUiEvent {
         message: String,
     },
     Hit(PortHit),
+    Notice(String),
     Done,
     Error(String),
 }
@@ -66,6 +68,10 @@ pub struct ScanView {
     pub concurrency: String,
     pub timeout_ms: String,
     pub dry_run: bool,
+    /// Request SYN. Unavailable raw sockets fall back to TCP connect.
+    pub syn: bool,
+    /// Fallback or capability line shown on the Scan screen.
+    pub notice: String,
     pub field: ScanField,
     pub editing: bool,
     pub run_state: ScanRunState,
@@ -86,6 +92,8 @@ impl Default for ScanView {
             concurrency: DEFAULT_CONCURRENCY.to_string(),
             timeout_ms: DEFAULT_TIMEOUT_MS.to_string(),
             dry_run: false,
+            syn: false,
+            notice: String::new(),
             field: ScanField::Target,
             editing: false,
             run_state: ScanRunState::Idle,
@@ -120,13 +128,45 @@ impl ScanView {
             return format!("Error: {err}");
         }
         if let Some(hit) = self.results.get(self.selected) {
-            return format!("{}:{} {} (tcp connect)", hit.host, hit.port, hit.state);
+            return format!(
+                "{}:{} {} ({})",
+                hit.host,
+                hit.port,
+                hit.state,
+                self.mode_label()
+            );
+        }
+        if !self.notice.is_empty() {
+            return self.notice.clone();
         }
         if self.message.is_empty() {
-            "Select a row for detail. s start  p dry-run toggle  Tab fields".into()
+            "Select a row for detail. s start  p dry-run  y syn".into()
         } else {
             self.message.clone()
         }
+    }
+
+    pub fn mode_label(&self) -> &'static str {
+        if self.syn {
+            "syn requested"
+        } else {
+            "tcp connect"
+        }
+    }
+
+    /// Toggle a SYN request and explain whether it can run.
+    pub fn toggle_syn(&mut self) {
+        self.syn = !self.syn;
+        if !self.syn {
+            self.notice.clear();
+            return;
+        }
+        let avail = SynAvailability::probe();
+        self.notice = if avail.usable {
+            format!("SYN available: {}", avail.detail)
+        } else {
+            format!("SYN unavailable: {}. Start uses TCP connect.", avail.detail)
+        };
     }
 
     pub fn select_next(&mut self) {
@@ -189,6 +229,9 @@ impl ScanView {
                 Ok(ScanUiEvent::Hit(hit)) => {
                     self.results.push(hit);
                 }
+                Ok(ScanUiEvent::Notice(message)) => {
+                    self.notice = message;
+                }
                 Ok(ScanUiEvent::Done) => {
                     self.run_state = ScanRunState::Done;
                     self.message = format!("done; {} hit(s)", self.results.len());
@@ -231,7 +274,7 @@ impl ScanView {
             .unwrap_or(DEFAULT_CONCURRENCY);
         let timeout_ms: u64 = self.timeout_ms.trim().parse().unwrap_or(DEFAULT_TIMEOUT_MS);
 
-        let config = ScanConfig::from_parts(
+        let mut config = ScanConfig::from_parts(
             self.target.trim(),
             &self.ports,
             timeout_ms,
@@ -240,6 +283,9 @@ impl ScanView {
             None,
         )
         .map_err(|e| e.to_string())?;
+        if self.syn {
+            config.technique = ScanTechnique::Syn;
+        }
 
         scope.check(&config.target).map_err(|e| e.to_string())?;
 
@@ -297,6 +343,11 @@ impl ScanView {
                                     break;
                                 }
                             }
+                            Ok(ModuleEvent::Log { message, .. }) => {
+                                if tx_fwd.send(ScanUiEvent::Notice(message)).is_err() {
+                                    break;
+                                }
+                            }
                             Ok(ModuleEvent::Result { summary, .. }) => {
                                 if let Some(hit) = parse_result_summary(&summary) {
                                     if tx_fwd.send(ScanUiEvent::Hit(hit)).is_err() {
@@ -312,7 +363,6 @@ impl ScanView {
                                 let _ = tx_fwd.send(ScanUiEvent::Error(message));
                                 break;
                             }
-                            Ok(ModuleEvent::Log { .. }) => {}
                             Err(_) => break,
                         }
                     }
@@ -340,7 +390,10 @@ impl ScanView {
 
 fn parse_result_summary(summary: &str) -> Option<PortHit> {
     // Formats: "host:port open" | "would connect host:port"
-    if let Some(rest) = summary.strip_prefix("would connect ") {
+    if let Some(rest) = summary
+        .strip_prefix("would connect ")
+        .or_else(|| summary.strip_prefix("would syn "))
+    {
         let (host, port_s) = rest.rsplit_once(':')?;
         let port: u16 = port_s.parse().ok()?;
         return Some(PortHit {
@@ -382,6 +435,21 @@ mod tests {
         let p = parse_result_summary("would connect 10.0.0.5:22").unwrap();
         assert_eq!(p.port, 22);
         assert_eq!(p.state, PortState::Planned);
+        let syn = parse_result_summary("would syn 10.0.0.5:443").unwrap();
+        assert_eq!(syn.port, 443);
+        assert_eq!(syn.state, PortState::Planned);
+    }
+
+    #[test]
+    fn syn_toggle_explains_availability() {
+        let mut view = ScanView::default();
+        assert!(!view.syn);
+        view.toggle_syn();
+        assert!(view.syn);
+        assert!(!view.notice.is_empty());
+        view.toggle_syn();
+        assert!(!view.syn);
+        assert!(view.notice.is_empty());
     }
 
     #[test]

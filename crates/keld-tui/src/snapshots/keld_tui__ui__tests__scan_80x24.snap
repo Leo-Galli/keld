@@ -6,7 +6,7 @@ KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z
 ┌ Nav ─┐┌ Scan ────────────────────────────────────────────────────────────────┐
 │ Dash ││>Target [10.0.0.5]   Ports [1-1024]                                   │
 │*Scan ││ Concurrency [100]   Timeout [1000]  [ ] dry-run  state:idle          │
-│ Prob ││Enter edit  Tab fields  s start  p dry-run                            │
+│ Prob ││Enter edit  Tab fields  s start  p dry-run  y syn[ ]                  │
 │ TLS  ││Progress ##########-------------- 42%  scanning                       │
 │ HTTP ││                                                                      │
 │ Fuzz ││ Host               Port State                                        │

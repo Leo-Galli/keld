@@ -49,6 +49,7 @@ const HELP_VIM: &[(&str, &str)] = &[
     ("Ctrl+d / Ctrl+u", "Page down / up"),
     ("Enter", "Activate"),
     ("Space", "Toggle"),
+    ("s / p / y", "Scan: start / dry-run / SYN"),
 ];
 
 const HELP_ARROWS: &[(&str, &str)] = &[
@@ -67,6 +68,7 @@ const HELP_ARROWS: &[(&str, &str)] = &[
     ("PgUp / PgDn", "Page up / down"),
     ("Enter", "Activate"),
     ("Space", "Toggle"),
+    ("s / p / y", "Scan: start / dry-run / SYN"),
 ];
 
 #[cfg(test)]

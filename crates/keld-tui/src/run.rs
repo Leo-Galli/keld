@@ -165,6 +165,9 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         KeyCode::Char('p') if app.screen == Screen::Scan => {
             return Some(KeyAction::ScanToggleDryRun);
         }
+        KeyCode::Char('y') if app.screen == Screen::Scan => {
+            return Some(KeyAction::ScanToggleSyn);
+        }
         KeyCode::Char('/') if app.screen == Screen::AuditLog => {
             return Some(KeyAction::BeginFilter);
         }
@@ -334,6 +337,22 @@ mod tests {
         assert_eq!(
             map_key(KeyCode::Char('j'), KeyModifiers::NONE, &arrows, 120),
             None
+        );
+    }
+
+    #[test]
+    fn scan_y_toggles_syn_unless_editing() {
+        let mut app = shell_app(KeyPreset::Vim);
+        app.screen = Screen::Scan;
+        app.focus = FocusPane::Main;
+        assert_eq!(
+            map_key(KeyCode::Char('y'), KeyModifiers::NONE, &app, 120),
+            Some(KeyAction::ScanToggleSyn)
+        );
+        app.scan.editing = true;
+        assert_eq!(
+            map_key(KeyCode::Char('y'), KeyModifiers::NONE, &app, 120),
+            Some(KeyAction::FilterChar('y'))
         );
     }
 }

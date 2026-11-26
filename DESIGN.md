@@ -113,7 +113,7 @@ Arrows + PageUp/PageDown + Home/End. Enter / Space same.
 
 ### Module screens
 
-`s` start, `p` pause/resume, `c` cancel, `e` export, `r` refresh options.
+`s` start, `p` dry-run toggle, `y` request SYN (falls back to TCP connect when a raw socket is unavailable; the reason stays on the Scan screen). `c` cancel, `e` export, `r` refresh options land with later module tasks. Pause/resume is not wired yet.
 
 Mouse (optional, on by default): click focus/select, scroll lists. Disable in Settings.
 

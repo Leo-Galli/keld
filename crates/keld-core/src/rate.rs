@@ -25,16 +25,31 @@ impl RateLimiter {
 
     /// Block (async sleep) until the next unit may start.
     pub async fn wait(&mut self) {
-        let Some(interval) = self.min_interval else {
-            return;
-        };
-        if let Some(last) = self.last {
-            let elapsed = last.elapsed();
-            if elapsed < interval {
-                tokio::time::sleep(interval - elapsed).await;
-            }
+        if let Some(pause) = self.pause_for() {
+            tokio::time::sleep(pause).await;
         }
-        self.last = Some(Instant::now());
+        self.stamp();
+    }
+
+    /// Same gate as [`wait`](Self::wait) for a blocking scan thread.
+    pub fn wait_blocking(&mut self) {
+        if let Some(pause) = self.pause_for() {
+            std::thread::sleep(pause);
+        }
+        self.stamp();
+    }
+
+    fn pause_for(&self) -> Option<Duration> {
+        let interval = self.min_interval?;
+        let last = self.last?;
+        let elapsed = last.elapsed();
+        (elapsed < interval).then(|| interval - elapsed)
+    }
+
+    fn stamp(&mut self) {
+        if self.min_interval.is_some() {
+            self.last = Some(Instant::now());
+        }
     }
 }
 

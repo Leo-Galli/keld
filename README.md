@@ -43,6 +43,7 @@ keld doctor
 keld doctor --json
 keld scan 127.0.0.1 --ports top --dry-run
 keld scan 10.0.0.5 --ports 1-1024 --timeout 500 --json
+keld scan 10.0.0.5 --ports 22,80 --syn
 ```
 
 Use only on systems you own or are explicitly authorized to test. Active modules require a scope (`scope.toml` or explicit targets). Out-of-scope targets are refused. Every action is written to an audit log.
@@ -51,7 +52,7 @@ Use only on systems you own or are explicitly authorized to test. Active modules
 
 | Module | Purpose |
 |--------|---------|
-| `scan` | TCP connect port scan (optional SYN when privileged) |
+| `scan` | TCP connect port scan; `--syn` uses a raw socket when the OS allows it and otherwise falls back to connect |
 | `probe` | Service and banner detection |
 | `tls` | Certificate chain, protocols, weak ciphers, HSTS |
 | `http` | Security headers, cookies, CORS, fingerprinting |
@@ -73,6 +74,7 @@ Use only on systems you own or are explicitly authorized to test. Active modules
 | `:` | Command palette (fuzzy; includes preset switch) |
 | `?` | Help (active keybinding preset) |
 | `q` / Esc | Back / close overlay |
+| `s` / `p` / `y` | Scan: start / dry-run / request SYN |
 | Ctrl+C | Quit (confirm if jobs running) |
 
 Vim and Arrows presets switch from the command palette (Settings persistence in KL-023). See [DESIGN.md](DESIGN.md).

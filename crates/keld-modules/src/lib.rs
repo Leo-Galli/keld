@@ -11,12 +11,15 @@ use keld_core::{EventSender, JobId, ModuleKind};
 pub mod ports;
 pub mod scan;
 pub mod stub;
+pub mod syn_path;
 
 pub use ports::{parse_ports, PortParseError, MAX_PORTS, TOP_100};
 pub use scan::{
-    PortHit, PortState, ScanConfig, ScanError, ScanModule, DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_MS,
+    PortHit, PortState, ScanConfig, ScanError, ScanModule, ScanReport, DEFAULT_CONCURRENCY,
+    DEFAULT_TIMEOUT_MS,
 };
 pub use stub::StubModule;
+pub use syn_path::{decide, ScanTechnique, SynAvailability, TechniqueDecision};
 
 /// Shared async contract for every recon/audit module.
 pub trait Module: Send + Sync {

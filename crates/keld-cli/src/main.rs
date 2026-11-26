@@ -87,7 +87,7 @@ struct Cli {
 enum Commands {
     /// Report terminal, privilege and network capability checks
     Doctor,
-    /// TCP connect port scan (authorized targets only)
+    /// Port scan (TCP connect, or SYN when a raw socket is allowed)
     Scan {
         /// Host or IP in scope
         target: String,
@@ -97,6 +97,10 @@ enum Commands {
         /// Connect timeout in milliseconds
         #[arg(long, default_value_t = DEFAULT_TIMEOUT_MS)]
         timeout: u64,
+        /// Request SYN probes. Needs root or CAP_NET_RAW on Unix.
+        /// Windows blocks raw TCP (Npcap is reported by `doctor`); falls back to TCP connect.
+        #[arg(long)]
+        syn: bool,
     },
 }
 
@@ -163,6 +167,7 @@ fn main() -> Result<ExitCode> {
             target,
             ports,
             timeout,
+            syn,
         }) => {
             let mut audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
             let code = scan_cmd::run(
@@ -175,6 +180,7 @@ fn main() -> Result<ExitCode> {
                     rate: cli.rate,
                     json: cli.json,
                     color,
+                    syn,
                 },
                 &scope,
                 &mut audit,
@@ -231,6 +237,19 @@ mod tests {
     }
 
     #[test]
+    fn parses_scan_syn_flag() {
+        let cli =
+            Cli::try_parse_from(["keld", "scan", "127.0.0.1", "--syn", "--ports", "22"]).unwrap();
+        match cli.command {
+            Some(Commands::Scan { syn, ports, .. }) => {
+                assert!(syn);
+                assert_eq!(ports, "22");
+            }
+            other => panic!("expected Scan, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn parses_doctor_with_global_json() {
         let cli = Cli::try_parse_from(["keld", "doctor", "--json"]).unwrap();
         assert!(cli.json);
@@ -256,10 +275,12 @@ mod tests {
                 target,
                 ports,
                 timeout,
+                syn,
             }) => {
                 assert_eq!(target, "127.0.0.1");
                 assert_eq!(ports, "22,80");
                 assert_eq!(timeout, 500);
+                assert!(!syn);
             }
             other => panic!("expected Scan, got {other:?}"),
         }
