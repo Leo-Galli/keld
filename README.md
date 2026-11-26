@@ -40,6 +40,7 @@ keld --theme light
 # CLI
 keld --help
 keld doctor
+keld doctor --json
 keld scan --help
 ```
 

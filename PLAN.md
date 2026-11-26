@@ -63,10 +63,10 @@ Every active module requires a target scope (`scope.toml` or explicit targets). 
 ## CLI design
 
 - Quiet by default, colored readable output, `--json` on every command.
-- Progress via `indicatif`; Ctrl+C saves partial results.
-- `keld doctor`: privileges, Npcap, network, terminal capabilities.
+- Progress via `indicatif` (modules); Ctrl+C partial-save hook skeleton installed for CLI commands.
+- `keld doctor`: stub checks for TTY, color, Unicode, elevation, Npcap, local network, scope (deeper probes with modules).
 - Shell completions + man page generated at build time.
-- Global flags: `--config`, `--scope`, `--dry-run`, `--json`, `--ascii`, `--no-splash`, `--no-color`, rate/concurrency overrides.
+- Global flags: `--config`, `--scope`, `--audit-log`, `--dry-run`, `--json`, `--ascii`, `--no-splash`, `--no-color`, `--theme`, `--rate`, `--concurrency`.
 
 ## TUI design
 
