@@ -2,17 +2,17 @@
 
 ## Current task
 
-**KL-008** -- CLI framework: global flags, `--json`, colored output, Ctrl+C partial-save hook skeleton, `keld doctor` stub
+**KL-009** -- Command palette + help overlay + keybinding presets (vim/arrows)
 
 Acceptance:
-- Global flags wired through clap (reuse existing where present)
-- `--json` on commands that emit results (stub OK where no module yet)
-- Colored human output; respects `NO_COLOR`
-- Ctrl+C hook skeleton that can save partial results later
-- `keld doctor` stub reports basic capability checks
+- `:` opens a fuzzy command palette over every registered action
+- `?` shows a help overlay with the active keybinding preset
+- Vim-style and arrow-key presets selectable (config/settings later wire in KL-023; presets exist and switch now)
+- Snapshot tests for palette and help at least at 80x24
 
 ## Done
 
+- **KL-008** -- CLI framework: global flags, `--json`, colored output, Ctrl+C partial-save hook skeleton, `keld doctor` stub -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/15
 - **KL-007** -- Audit log (file + API); Audit log TUI viewer (read-only) -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/13
 - **KL-006** -- Scope model + `scope.toml` parse/validate/exclude; refuse out-of-scope; status-bar scope summary -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/11
 - **KL-005** -- Event bus + Job model in `keld-core`; stub module that emits progress for TUI/CLI wiring -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/9
@@ -31,6 +31,7 @@ Acceptance:
 
 ## Decisions log
 
+- 2026-11-26: CLI subcommands via clap `Option<Commands>` (no args still opens TUI); `--json`/`--dry-run`/`--rate`/`--concurrency` are global; colors are hand-rolled ANSI (no extra crate); Ctrl+C uses tokio signal on a helper thread + one-shot saver; doctor is stub checks only
 - 2026-11-26: Audit log is append-only JSONL (`audit.jsonl`); default `./audit.jsonl` else user data dir; TUI viewer is read-only with `/` filter and j/k select
 - 2026-11-26: Scope entries are IP, CIDR, or hostname (URL hosts stripped); no DNS in the gate; excludes win; empty includes invalid; summary `first (+n, ex:m)` for status/header
 - 2026-11-26: Event bus uses tokio `broadcast` (fan-out to CLI/TUI/audit); modules get `EventSender`; lag is reported, not blocking
@@ -48,7 +49,6 @@ Acceptance:
 
 ### Foundation
 
-- **KL-008** -- CLI framework: global flags, `--json`, colored output, Ctrl+C partial-save hook skeleton, `keld doctor` stub
 - **KL-009** -- Command palette + help overlay + keybinding presets (vim/arrows)
 - **KL-010** -- Dashboard screen with placeholder charts/sparklines; Jobs list screen
 
