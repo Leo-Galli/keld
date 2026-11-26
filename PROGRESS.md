@@ -2,16 +2,11 @@
 
 ## Current task
 
-**KL-010** -- Dashboard screen with placeholder charts/sparklines; Jobs list screen
-
-Acceptance:
-- Dashboard shows workspace overview, findings-by-severity bar chart (placeholder data OK), recent jobs, RPS sparkline, open-ports summary
-- Jobs list screen: running and finished jobs with progress, duration, result counts
-- Jobs keep running when switching screens (engine wiring stub OK if events already support it)
-- Snapshot tests for Dashboard and Jobs at least at 80x24
+**KL-011** -- `scan`: TCP connect scanner (ranges, top-ports, timeout, concurrency, dry-run); CLI + TUI + tests
 
 ## Done
 
+- **KL-010** -- Dashboard screen with placeholder charts/sparklines; Jobs list screen -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/19
 - **KL-009** -- Command palette + help overlay + keybinding presets (vim/arrows) -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/17
 - **KL-008** -- CLI framework: global flags, `--json`, colored output, Ctrl+C partial-save hook skeleton, `keld doctor` stub -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/15
 - **KL-007** -- Audit log (file + API); Audit log TUI viewer (read-only) -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/13
@@ -32,6 +27,7 @@ Acceptance:
 
 ## Decisions log
 
+- 2026-11-26: Dashboard/Jobs share `DashboardState` on `App` (placeholder findings/sparkline/ports); Jobs is its own sidebar screen; `on_tick` advances running jobs ~1s regardless of current screen until real engine wiring
 - 2026-11-26: Command palette uses in-crate fuzzy substring scoring (no extra crate); palette selection always Up/Down so j/k remain typeable; Esc closes overlays without quitting; Vim vs Arrows are mutually exclusive for list/sidebar nav; preset switch via palette until KL-023 Settings
 - 2026-11-26: CLI subcommands via clap `Option<Commands>` (no args still opens TUI); `--json`/`--dry-run`/`--rate`/`--concurrency` are global; colors are hand-rolled ANSI (no extra crate); Ctrl+C uses tokio signal on a helper thread + one-shot saver; doctor is stub checks only
 - 2026-11-26: Audit log is append-only JSONL (`audit.jsonl`); default `./audit.jsonl` else user data dir; TUI viewer is read-only with `/` filter and j/k select
@@ -48,10 +44,6 @@ Acceptance:
 - 2026-11-25: First commit on `main` is empty; KL-001 landed via squash-merge of PR #1
 
 ## Backlog (ordered)
-
-### Foundation
-
-- **KL-010** -- Dashboard screen with placeholder charts/sparklines; Jobs list screen
 
 ### Modules
 
