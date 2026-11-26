@@ -1,11 +1,12 @@
-//! `keld scan` -- TCP connect port scanner.
+//! `keld scan` -- TCP connect port scanner, with an optional SYN request.
 
 use std::sync::{Arc, Mutex};
 
 use indicatif::{ProgressBar, ProgressStyle};
 use keld_core::{AuditEntry, AuditLog, AuditOutcome, EventBus, JobId, ModuleEvent, Scope};
 use keld_modules::{
-    PortHit, PortState, ScanConfig, ScanModule, DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_MS,
+    PortState, ScanConfig, ScanModule, ScanReport, ScanTechnique, DEFAULT_CONCURRENCY,
+    DEFAULT_TIMEOUT_MS,
 };
 use serde::Serialize;
 
@@ -17,6 +18,9 @@ use crate::signal::PartialSaveHook;
 struct ScanJson {
     target: String,
     dry_run: bool,
+    technique: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fallback: Option<String>,
     open: Vec<ScanJsonHit>,
     planned: Vec<ScanJsonHit>,
     parameters: String,
@@ -38,6 +42,7 @@ pub struct ScanArgs {
     pub rate: Option<u32>,
     pub json: bool,
     pub color: ColorMode,
+    pub syn: bool,
 }
 
 pub fn run(args: ScanArgs, scope: &Scope, audit: &mut AuditLog) -> Result<u8, String> {
@@ -52,7 +57,7 @@ pub fn run(args: ScanArgs, scope: &Scope, audit: &mut AuditLog) -> Result<u8, St
         args.timeout_ms
     };
 
-    let config = ScanConfig::from_parts(
+    let mut config = ScanConfig::from_parts(
         args.target.clone(),
         &args.ports,
         timeout_ms,
@@ -61,6 +66,9 @@ pub fn run(args: ScanArgs, scope: &Scope, audit: &mut AuditLog) -> Result<u8, St
         args.rate,
     )
     .map_err(|e| e.to_string())?;
+    if args.syn {
+        config.technique = ScanTechnique::Syn;
+    }
 
     if let Err(e) = scope.check(&config.target) {
         let entry = AuditEntry::now(
@@ -158,12 +166,12 @@ pub fn run(args: ScanArgs, scope: &Scope, audit: &mut AuditLog) -> Result<u8, St
             }
         });
 
-        let hits = handle
+        let report = handle
             .await
             .map_err(|e| e.to_string())?
             .map_err(|e| e.to_string())?;
         let _ = drain.await;
-        Ok::<_, String>(hits)
+        Ok::<_, String>(report)
     });
 
     if let Some(pb) = bar {
@@ -181,8 +189,8 @@ pub fn run(args: ScanArgs, scope: &Scope, audit: &mut AuditLog) -> Result<u8, St
         return Ok(130);
     }
 
-    let hits = match scan_result {
-        Ok(h) => h,
+    let report = match scan_result {
+        Ok(report) => report,
         Err(e) => {
             let entry = AuditEntry::now(
                 "scan",
@@ -198,16 +206,17 @@ pub fn run(args: ScanArgs, scope: &Scope, audit: &mut AuditLog) -> Result<u8, St
     let entry = AuditEntry::now(
         "scan",
         config.target.clone(),
-        config.parameters_summary(),
+        report.audit_parameters(&config),
         AuditOutcome::Ok,
     );
     audit.append(entry).map_err(|e| e.to_string())?;
 
-    emit_results(&args, &config, &hits)?;
+    emit_results(&args, &config, &report)?;
     Ok(0)
 }
 
-fn emit_results(args: &ScanArgs, config: &ScanConfig, hits: &[PortHit]) -> Result<(), String> {
+fn emit_results(args: &ScanArgs, config: &ScanConfig, report: &ScanReport) -> Result<(), String> {
+    let hits = &report.hits;
     if args.json {
         let open: Vec<ScanJsonHit> = hits
             .iter()
@@ -230,18 +239,29 @@ fn emit_results(args: &ScanArgs, config: &ScanConfig, hits: &[PortHit]) -> Resul
         let doc = ScanJson {
             target: config.target.clone(),
             dry_run: config.dry_run,
+            technique: report.used.as_str().into(),
+            fallback: report.fallback.clone(),
             open,
             planned,
-            parameters: config.parameters_summary(),
+            parameters: report.audit_parameters(config),
         };
         return output::emit_json(&doc);
     }
+
+    if let Some(fallback) = &report.fallback {
+        println!("{}", args.color.yellow(fallback));
+    }
+
+    let via = match report.used {
+        ScanTechnique::Syn => "SYN",
+        ScanTechnique::Connect => "TCP connect",
+    };
 
     if config.dry_run {
         println!(
             "{}",
             args.color.bold(&format!(
-                "dry-run: would probe {} ports on {}",
+                "dry-run: would {via} {} ports on {}",
                 hits.len(),
                 config.target
             ))
@@ -256,7 +276,7 @@ fn emit_results(args: &ScanArgs, config: &ScanConfig, hits: &[PortHit]) -> Resul
         println!(
             "{}",
             args.color.dim(&format!(
-                "no open ports on {} ({} probed)",
+                "no open ports on {} ({} probed, {via})",
                 config.target,
                 config.ports.len()
             ))
@@ -265,7 +285,7 @@ fn emit_results(args: &ScanArgs, config: &ScanConfig, hits: &[PortHit]) -> Resul
         println!(
             "{}",
             args.color.green(&format!(
-                "open ports on {} ({}/{}):",
+                "open ports on {} ({}/{}, {via}):",
                 config.target,
                 hits.len(),
                 config.ports.len()

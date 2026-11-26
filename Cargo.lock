@@ -746,6 +746,7 @@ name = "keld-modules"
 version = "0.1.0"
 dependencies = [
  "keld-core",
+ "socket2",
  "thiserror 2.0.21",
  "tokio",
 ]

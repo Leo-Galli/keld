@@ -64,7 +64,7 @@ Every active module requires a target scope (`scope.toml` or explicit targets). 
 
 - Quiet by default, colored readable output, `--json` on every command.
 - Progress via `indicatif` (modules); Ctrl+C partial-save hook skeleton installed for CLI commands.
-- `keld doctor`: stub checks for TTY, color, Unicode, elevation, Npcap, local network, scope (deeper probes with modules).
+- `keld doctor`: TTY, color, Unicode, elevation, Npcap, SYN raw-socket capability (falls back to TCP connect), local network, scope.
 - Shell completions + man page generated at build time.
 - Global flags: `--config`, `--scope`, `--audit-log`, `--dry-run`, `--json`, `--ascii`, `--no-splash`, `--no-color`, `--theme`, `--rate`, `--concurrency`.
 

@@ -1,7 +1,7 @@
-//! TCP connect port scanner (authorized targets only).
+//! Port scanner (TCP connect, optional IPv4 SYN) for authorized targets only.
 
 use std::future::Future;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -15,6 +15,7 @@ use tokio::sync::Semaphore;
 use tokio::time::timeout;
 
 use crate::ports::{parse_ports, PortParseError};
+use crate::syn_path::{self, ScanTechnique, SynAvailability, SynScanRequest};
 use crate::Module;
 
 /// Default connect timeout.
@@ -22,7 +23,7 @@ pub const DEFAULT_TIMEOUT_MS: u64 = 1_000;
 /// Default concurrent connect attempts.
 pub const DEFAULT_CONCURRENCY: usize = 100;
 
-/// Configuration for one TCP connect scan job.
+/// Configuration for one scan job.
 #[derive(Debug, Clone)]
 pub struct ScanConfig {
     pub target: String,
@@ -30,8 +31,10 @@ pub struct ScanConfig {
     pub timeout: Duration,
     pub concurrency: usize,
     pub dry_run: bool,
-    /// Optional max connect starts per second.
+    /// Optional max probe starts per second.
     pub rate_per_sec: Option<u32>,
+    /// `Syn` is attempted only when a raw IPv4 socket is usable.
+    pub technique: ScanTechnique,
 }
 
 impl ScanConfig {
@@ -56,21 +59,45 @@ impl ScanConfig {
             concurrency: concurrency.max(1),
             dry_run,
             rate_per_sec,
+            technique: ScanTechnique::Connect,
         })
     }
 
     /// Short parameters line for audit / status.
     pub fn parameters_summary(&self) -> String {
         format!(
-            "ports={} timeout_ms={} concurrency={} dry_run={} rate={}",
+            "ports={} timeout_ms={} concurrency={} dry_run={} rate={} technique={}",
             self.ports.len(),
             self.timeout.as_millis(),
             self.concurrency,
             self.dry_run,
             self.rate_per_sec
                 .map(|r| r.to_string())
-                .unwrap_or_else(|| "none".into())
+                .unwrap_or_else(|| "none".into()),
+            self.technique.as_str()
         )
+    }
+}
+
+/// What a finished scan actually did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScanReport {
+    pub hits: Vec<PortHit>,
+    pub used: ScanTechnique,
+    pub fallback: Option<String>,
+}
+
+impl ScanReport {
+    /// Audit parameters including the technique that ran.
+    pub fn audit_parameters(&self, config: &ScanConfig) -> String {
+        let mut line = config.parameters_summary();
+        line.push_str(" used=");
+        line.push_str(self.used.as_str());
+        if let Some(fallback) = &self.fallback {
+            line.push_str(" fallback=");
+            line.push_str(fallback);
+        }
+        line
     }
 }
 
@@ -117,6 +144,9 @@ pub enum ScanError {
     Resolve { target: String, message: String },
     #[error("no addresses for `{target}`")]
     NoAddress { target: String },
+    /// SYN could not start; the caller falls back to TCP connect.
+    #[error("{message}")]
+    SynUnavailable { message: String },
 }
 
 /// TCP connect scanner module.
@@ -136,13 +166,65 @@ impl ScanModule {
         &self,
         job_id: JobId,
         events: EventSender,
-    ) -> Result<Vec<PortHit>, ScanError> {
+    ) -> Result<ScanReport, ScanError> {
         self.scope.check(&self.config.target)?;
 
-        if self.config.dry_run {
-            return Ok(self.emit_dry_run(job_id, &events).await);
+        let avail = if self.config.technique == ScanTechnique::Syn {
+            Some(SynAvailability::probe())
+        } else {
+            None
+        };
+        let decision = syn_path::decide(self.config.technique, avail.as_ref());
+        if let Some(message) = &decision.fallback {
+            let _ = events.publish(ModuleEvent::Log {
+                job_id,
+                level: LogLevel::Warn,
+                message: message.clone(),
+            });
         }
 
+        if self.config.dry_run {
+            let hits = self.emit_dry_run(job_id, &events, decision.used).await;
+            return Ok(ScanReport {
+                hits,
+                used: decision.used,
+                fallback: decision.fallback,
+            });
+        }
+
+        let (hits, used, fallback) = match decision.used {
+            ScanTechnique::Connect => {
+                let hits = self.connect_ports(job_id, &events).await?;
+                (hits, ScanTechnique::Connect, decision.fallback)
+            }
+            ScanTechnique::Syn => match self.syn_ports(job_id, &events).await {
+                Ok(hits) => (hits, ScanTechnique::Syn, decision.fallback),
+                Err(ScanError::SynUnavailable { message }) => {
+                    let message = format!("SYN unavailable: {message}. Using TCP connect.");
+                    let _ = events.publish(ModuleEvent::Log {
+                        job_id,
+                        level: LogLevel::Warn,
+                        message: message.clone(),
+                    });
+                    let hits = self.connect_ports(job_id, &events).await?;
+                    (hits, ScanTechnique::Connect, Some(message))
+                }
+                Err(e) => return Err(e),
+            },
+        };
+
+        Ok(ScanReport {
+            hits,
+            used,
+            fallback,
+        })
+    }
+
+    async fn connect_ports(
+        &self,
+        job_id: JobId,
+        events: &EventSender,
+    ) -> Result<Vec<PortHit>, ScanError> {
         let addrs = resolve_addrs(&self.config.target).await?;
         let addr = *addrs.first().ok_or_else(|| ScanError::NoAddress {
             target: self.config.target.clone(),
@@ -205,12 +287,58 @@ impl ScanModule {
         Ok(hits)
     }
 
-    async fn emit_dry_run(&self, job_id: JobId, events: &EventSender) -> Vec<PortHit> {
+    async fn syn_ports(
+        &self,
+        job_id: JobId,
+        events: &EventSender,
+    ) -> Result<Vec<PortHit>, ScanError> {
+        let addrs = resolve_addrs(&self.config.target).await?;
+        let dst = addrs
+            .iter()
+            .find_map(|addr| match addr.ip() {
+                IpAddr::V4(ip) => Some(ip),
+                IpAddr::V6(_) => None,
+            })
+            .ok_or_else(|| ScanError::SynUnavailable {
+                message: "no IPv4 address (SYN path is IPv4-only)".into(),
+            })?;
+        let src = egress_ipv4(dst).map_err(|e| ScanError::SynUnavailable {
+            message: format!("IPv4 egress lookup failed: {e}"),
+        })?;
+        let req = SynScanRequest {
+            job_id,
+            host_label: self.config.target.clone(),
+            src,
+            dst,
+            ports: self.config.ports.clone(),
+            timeout: self.config.timeout,
+            rate_per_sec: self.config.rate_per_sec,
+        };
+        let events = events.clone();
+        // shortcut: SYN probes are serial on one raw socket; demux before raising in-flight count
+        tokio::task::spawn_blocking(move || syn_path::scan_ipv4(req, &events))
+            .await
+            .map_err(|e| ScanError::SynUnavailable {
+                message: format!("scan thread stopped: {e}"),
+            })?
+            .map_err(|message| ScanError::SynUnavailable { message })
+    }
+
+    async fn emit_dry_run(
+        &self,
+        job_id: JobId,
+        events: &EventSender,
+        used: ScanTechnique,
+    ) -> Vec<PortHit> {
+        let verb = match used {
+            ScanTechnique::Connect => "connect",
+            ScanTechnique::Syn => "syn",
+        };
         let total = self.config.ports.len() as u64;
         let mut planned = Vec::with_capacity(self.config.ports.len());
         for (i, port) in self.config.ports.iter().copied().enumerate() {
             let done = (i as u64) + 1;
-            let summary = format!("would connect {}:{}", self.config.target, port);
+            let summary = format!("would {verb} {}:{}", self.config.target, port);
             let _ = events.publish(ModuleEvent::Progress {
                 job_id,
                 done,
@@ -250,6 +378,19 @@ impl Module for ScanModule {
                 }
             }
         })
+    }
+}
+
+fn egress_ipv4(dst: Ipv4Addr) -> std::io::Result<Ipv4Addr> {
+    let sock = std::net::UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
+    // connect() on UDP does not send a datagram; it only selects the egress address.
+    sock.connect((dst, 9))?;
+    match sock.local_addr()?.ip() {
+        IpAddr::V4(ip) => Ok(ip),
+        IpAddr::V6(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::AddrNotAvailable,
+            "egress is not IPv4",
+        )),
     }
 }
 
@@ -308,7 +449,7 @@ mod tests {
         let cfg = ScanConfig::from_parts("127.0.0.1", "22,80", 200, 4, true, None).unwrap();
         let module = ScanModule::new(cfg, loopback_scope());
         let id = JobId::new(1);
-        let hits = module.run_scan(id, bus.sender()).await.unwrap();
+        let hits = module.run_scan(id, bus.sender()).await.unwrap().hits;
         assert_eq!(hits.len(), 2);
         assert!(hits.iter().all(|h| h.state == PortState::Planned));
 
@@ -355,7 +496,7 @@ mod tests {
         let mut job = Job::new(id, ModuleKind::Scan);
         job.start().unwrap();
 
-        let hits = module.run_scan(id, bus.sender()).await.unwrap();
+        let hits = module.run_scan(id, bus.sender()).await.unwrap().hits;
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].port, port);
         assert_eq!(hits[0].state, PortState::Open);
@@ -387,8 +528,88 @@ mod tests {
         let accept = tokio::spawn(async move {
             let (_s, _) = listener.accept().await.unwrap();
         });
-        let hits = module.run_scan(JobId::new(4), bus.sender()).await.unwrap();
+        let hits = module
+            .run_scan(JobId::new(4), bus.sender())
+            .await
+            .unwrap()
+            .hits;
         assert!(hits.iter().all(|h| h.port == open));
         accept.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn syn_dry_run_names_the_technique_it_would_use() {
+        let bus = EventBus::new(32);
+        let mut rx = bus.subscribe();
+        let mut cfg = ScanConfig::from_parts("127.0.0.1", "22", 200, 1, true, None).unwrap();
+        cfg.technique = ScanTechnique::Syn;
+        let report = ScanModule::new(cfg, loopback_scope())
+            .run_scan(JobId::new(6), bus.sender())
+            .await
+            .unwrap();
+        assert_eq!(report.hits.len(), 1);
+        assert_eq!(report.hits[0].state, PortState::Planned);
+        let verb = if report.used == ScanTechnique::Syn {
+            "would syn "
+        } else {
+            "would connect "
+        };
+        let mut saw = false;
+        while let Ok(ev) = rx.try_recv() {
+            if let ModuleEvent::Result { summary, .. } = ev {
+                assert!(summary.starts_with(verb), "{summary}");
+                saw = true;
+            }
+        }
+        assert!(saw);
+        if report.used == ScanTechnique::Connect {
+            assert!(report.fallback.unwrap().contains("TCP connect"));
+        }
+    }
+
+    #[tokio::test]
+    async fn syn_request_finds_loopback_listener_or_falls_back() {
+        let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let mut accept = tokio::spawn(async move {
+            let _ = listener.accept().await;
+        });
+
+        let bus = EventBus::new(64);
+        let mut rx = bus.subscribe();
+        let mut cfg =
+            ScanConfig::from_parts("127.0.0.1", &port.to_string(), 500, 2, false, None).unwrap();
+        cfg.technique = ScanTechnique::Syn;
+        let report = ScanModule::new(cfg, loopback_scope())
+            .run_scan(JobId::new(5), bus.sender())
+            .await
+            .unwrap();
+        assert!(report
+            .hits
+            .iter()
+            .any(|h| h.port == port && h.state == PortState::Open));
+        if report.used == ScanTechnique::Connect {
+            let fallback = report.fallback.expect("fallback reason");
+            assert!(fallback.contains("TCP connect"));
+            let mut saw_log = false;
+            while let Ok(ev) = rx.try_recv() {
+                if let ModuleEvent::Log { message, .. } = ev {
+                    if message == fallback {
+                        saw_log = true;
+                    }
+                }
+            }
+            assert!(saw_log);
+        } else {
+            assert!(report.fallback.is_none());
+        }
+        if tokio::time::timeout(Duration::from_millis(300), &mut accept)
+            .await
+            .is_err()
+        {
+            accept.abort();
+        }
     }
 }

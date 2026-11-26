@@ -383,7 +383,10 @@ fn draw_scan(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
             app.theme.text_style(),
         )),
         Line::from(Span::styled(
-            "Enter edit  Tab fields  s start  p dry-run",
+            format!(
+                "Enter edit  Tab fields  s start  p dry-run  y syn[{}]",
+                if scan.syn { "x" } else { " " }
+            ),
             app.theme.muted_style(),
         )),
         Line::from(Span::styled(
@@ -405,6 +408,15 @@ fn draw_scan(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
                 .add_modifier(Modifier::BOLD),
         )),
     ];
+    if !scan.notice.is_empty() {
+        lines.insert(
+            3,
+            Line::from(Span::styled(
+                scan.notice.as_str(),
+                Style::default().fg(app.theme.accent_secondary),
+            )),
+        );
+    }
 
     if scan.results.is_empty() {
         lines.push(Line::from(Span::styled(
@@ -412,7 +424,7 @@ fn draw_scan(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
             app.theme.muted_style(),
         )));
     } else {
-        let header_rows = 6u16;
+        let header_rows = if scan.notice.is_empty() { 6u16 } else { 7u16 };
         let inner_h = area.height.saturating_sub(2);
         let visible = inner_h.saturating_sub(header_rows + 2) as usize;
         let selected = scan.selected.min(scan.results.len() - 1);
@@ -752,7 +764,7 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Screen::AuditLog => format!("  / filter  {list_hint} select"),
         Screen::Jobs => format!("  {list_hint} select"),
         Screen::Scan if app.scan.editing => "  Enter done  Tab fields".to_string(),
-        Screen::Scan => format!("  s start  p dry-run  {list_hint} select"),
+        Screen::Scan => format!("  s start  p dry-run  y syn  {list_hint} select"),
         _ => String::new(),
     };
     let text = format!(

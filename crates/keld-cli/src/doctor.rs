@@ -1,8 +1,9 @@
-//! `keld doctor` -- basic capability checks (stub; deep probes arrive with modules).
+//! `keld doctor` -- terminal, privilege, and SYN-path checks.
 
 use std::io::{self, IsTerminal};
 use std::net::UdpSocket;
 
+use keld_modules::SynAvailability;
 use serde::Serialize;
 
 use crate::color::ColorMode;
@@ -34,14 +35,16 @@ pub struct DoctorContext {
 
 impl DoctorContext {
     pub fn run(&self) -> DoctorReport {
+        let syn = SynAvailability::probe();
         DoctorReport {
             version: keld_core::VERSION.to_string(),
             checks: vec![
                 check_tty(),
                 check_color(self.no_color),
                 check_unicode(self.ascii),
-                check_elevated(),
-                check_npcap(),
+                check_elevated(&syn),
+                check_npcap(&syn),
+                check_syn(&syn),
                 check_network(),
                 check_scope(self.scope_loaded, &self.scope_summary),
             ],
@@ -89,42 +92,51 @@ fn check_unicode(ascii: bool) -> DoctorCheck {
     }
 }
 
-fn check_elevated() -> DoctorCheck {
-    // shortcut: no OS privilege probe yet, upgrade in KL-012 with SYN/raw sockets
+fn check_elevated(syn: &SynAvailability) -> DoctorCheck {
     DoctorCheck {
         id: "elevated",
-        ok: false,
-        detail: "elevation not probed yet (stub); SYN / raw-socket paths need privileges later"
-            .into(),
+        ok: syn.elevated,
+        detail: if syn.elevated {
+            "process is elevated (root or administrator)".into()
+        } else {
+            "not elevated; raw SYN needs root on Unix or an elevated Windows session".into()
+        },
     }
 }
 
-fn check_npcap() -> DoctorCheck {
+fn check_npcap(syn: &SynAvailability) -> DoctorCheck {
     #[cfg(windows)]
     {
-        use std::path::Path;
-        let candidates = [
-            Path::new(r"C:\Windows\System32\Npcap\Packet.dll"),
-            Path::new(r"C:\Windows\System32\Packet.dll"),
-        ];
-        let found = candidates.iter().any(|p| p.exists());
         DoctorCheck {
             id: "npcap",
-            ok: found,
-            detail: if found {
-                "Npcap Packet.dll found (SYN path may be available later)".into()
+            ok: syn.npcap_present,
+            detail: if syn.npcap_present {
+                "Npcap Packet.dll found. Windows still blocks raw TCP, so SYN falls back to TCP connect".into()
             } else {
-                "Npcap not detected; connect-scan remains available".into()
+                "Npcap not detected. TCP connect scan remains available".into()
             },
         }
     }
     #[cfg(not(windows))]
     {
+        let _ = syn;
         DoctorCheck {
             id: "npcap",
             ok: true,
             detail: "Npcap is Windows-only; not required on this platform".into(),
         }
+    }
+}
+
+fn check_syn(syn: &SynAvailability) -> DoctorCheck {
+    DoctorCheck {
+        id: "syn",
+        ok: syn.usable,
+        detail: if syn.usable {
+            format!("SYN path available: {}", syn.detail)
+        } else {
+            format!("{}. TCP connect will be used", syn.detail)
+        },
     }
 }
 
@@ -177,7 +189,7 @@ pub fn emit(report: &DoctorReport, json: bool, color: ColorMode) -> Result<(), S
     println!();
     println!(
         "{}",
-        color.dim("Stub checks only; deeper probes land with scan/SYN and later modules.")
+        color.dim("SYN is optional. When it is unavailable, scan uses TCP connect.")
     );
     Ok(())
 }
@@ -198,9 +210,23 @@ mod tests {
         let ids: Vec<_> = report.checks.iter().map(|c| c.id).collect();
         assert_eq!(
             ids,
-            ["tty", "color", "unicode", "elevated", "npcap", "network", "scope"]
+            ["tty", "color", "unicode", "elevated", "npcap", "syn", "network", "scope"]
         );
         assert!(!report.version.is_empty());
+        let elevated = report.checks.iter().find(|c| c.id == "elevated").unwrap();
+        assert!(!elevated.detail.contains("not probed"));
+        assert!(!elevated.detail.contains("stub"));
+        let syn = report.checks.iter().find(|c| c.id == "syn").unwrap();
+        assert!(!syn.detail.is_empty());
+        if !syn.ok {
+            assert!(
+                syn.detail.contains("TCP connect")
+                    || syn.detail.contains("fallback")
+                    || syn.detail.contains("root")
+                    || syn.detail.contains("Npcap")
+                    || syn.detail.contains("raw")
+            );
+        }
         let unicode = report.checks.iter().find(|c| c.id == "unicode").unwrap();
         assert!(!unicode.ok);
         let scope = report.checks.iter().find(|c| c.id == "scope").unwrap();

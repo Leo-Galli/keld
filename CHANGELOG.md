@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `keld scan --syn`: optional IPv4 SYN probes when a raw TCP socket is allowed (root or `CAP_NET_RAW` on Unix). Otherwise the job falls back to TCP connect and prints the reason. `keld doctor` reports elevation, Npcap, and whether SYN is usable. The TUI Scan screen toggles the request with `y` and keeps the fallback line on screen.
 - `keld scan`: TCP connect port scanner (ranges, lists, `top`/`top1000`, timeout, concurrency, `--dry-run`, `--rate`, `--json`); scope-gated; audit logged; TUI Scan screen with form, progress, results table
 - Rate limiter helper in `keld-core`
 - Dashboard screen: workspace overview, findings-by-severity bars, RPS sparkline, recent jobs, open-ports summary (placeholder data); Jobs list screen with progress/duration/results; jobs keep advancing across screen switches

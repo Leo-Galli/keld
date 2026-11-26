@@ -206,6 +206,10 @@ impl App {
         self.scan.dry_run = !self.scan.dry_run;
     }
 
+    pub fn toggle_scan_syn(&mut self) {
+        self.scan.toggle_syn();
+    }
+
     pub fn scan_next_field(&mut self) {
         self.scan.field = self.scan.field.next();
     }
@@ -583,6 +587,9 @@ impl App {
             KeyAction::ScanToggleDryRun if self.screen == Screen::Scan => {
                 self.toggle_scan_dry_run();
             }
+            KeyAction::ScanToggleSyn if self.screen == Screen::Scan => {
+                self.toggle_scan_syn();
+            }
             KeyAction::Activate if self.screen == Screen::Scan && self.focus == FocusPane::Main => {
                 self.scan.editing = true;
             }
@@ -626,7 +633,8 @@ impl App {
             | KeyAction::PageUp
             | KeyAction::ChordG
             | KeyAction::ScanStart
-            | KeyAction::ScanToggleDryRun => {}
+            | KeyAction::ScanToggleDryRun
+            | KeyAction::ScanToggleSyn => {}
         }
     }
 
@@ -672,6 +680,7 @@ pub enum KeyAction {
     ChordG,
     ScanStart,
     ScanToggleDryRun,
+    ScanToggleSyn,
 }
 
 #[cfg(test)]
