@@ -1,0 +1,28 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
+┌ Nav ─┐┌ Probe ───────────────────────────────────────────────────────────────┐
+│ Dash ││>Target [10.0.0.5]   Ports [22,80]                                    │
+│ Scan ││ Concurrency [32]   Timeout [2000]  [ ] dry-run  state:idle           │
+│*Prob ││Enter edit  Tab fields  s start  p dry-run                            │
+│ TLS  ││Progress ######################## 100%  probing                       │
+│ HTTP ││                                                                      │
+│ Fuzz ││ Host            Port Service    Product                              │
+│ DNS  ││> 10.0.0.5          22 ssh        ssh                                 │
+│ Net  ││ 10.0.0.5          80 http       http                                 │
+│ Hash ││                                                                      │
+│ Rpt  ││Detail: 10.0.0.5:22 ssh / ssh via null -- SSH-2.0-OpenSSH_9.6         │
+│ Ws   ││                                                                      │
+│ Jobs ││                                                                      │
+│ Aud  ││                                                                      │
+│ Set  ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+└──────┘└──────────────────────────────────────────────────────────────────────┘
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  m sidebar  s start

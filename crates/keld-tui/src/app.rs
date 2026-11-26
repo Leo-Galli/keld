@@ -7,6 +7,7 @@ use keld_core::{AuditEntry, Scope, ThemeName};
 use crate::commands::{self, CommandId};
 use crate::dashboard::DashboardState;
 use crate::keys::KeyPreset;
+use crate::probe_view::{ProbeRunState, ProbeView};
 use crate::scan_view::{ScanRunState, ScanView};
 use crate::screen::Screen;
 use crate::symbols::Symbols;
@@ -128,6 +129,8 @@ pub struct App {
     pub job_selected: usize,
     /// Scan module form + results.
     pub scan: ScanView,
+    /// Probe module form + results.
+    pub probe: ProbeView,
     /// Tick accumulator so job elapsed advances ~1s even at 30 FPS.
     tick_accum: u32,
 }
@@ -172,6 +175,7 @@ impl App {
             dashboard: DashboardState::placeholder(),
             job_selected: 0,
             scan: ScanView::default(),
+            probe: ProbeView::default(),
             tick_accum: 0,
         }
     }
@@ -182,6 +186,7 @@ impl App {
             return;
         }
         self.scan.poll();
+        self.probe.poll();
         // ~30 FPS tick; advance job clocks once per ~30 ticks (~1s).
         self.tick_accum = self.tick_accum.saturating_add(1);
         if self.tick_accum < 30 {
@@ -202,8 +207,23 @@ impl App {
         }
     }
 
+    pub fn start_probe(&mut self) {
+        match self.probe.start(&self.scope) {
+            Ok(()) => {}
+            Err(e) => {
+                self.probe.error = Some(e.clone());
+                self.probe.message = e;
+                self.probe.run_state = ProbeRunState::Failed;
+            }
+        }
+    }
+
     pub fn toggle_scan_dry_run(&mut self) {
         self.scan.dry_run = !self.scan.dry_run;
+    }
+
+    pub fn toggle_probe_dry_run(&mut self) {
+        self.probe.dry_run = !self.probe.dry_run;
     }
 
     pub fn toggle_scan_syn(&mut self) {
@@ -216,6 +236,14 @@ impl App {
 
     pub fn scan_prev_field(&mut self) {
         self.scan.field = self.scan.field.prev();
+    }
+
+    pub fn probe_next_field(&mut self) {
+        self.probe.field = self.probe.field.next();
+    }
+
+    pub fn probe_prev_field(&mut self) {
+        self.probe.field = self.probe.field.prev();
     }
 
     pub fn job_select_next(&mut self) {
@@ -546,6 +574,19 @@ impl App {
             return;
         }
 
+        if self.probe.editing && self.screen == Screen::Probe {
+            match key {
+                KeyAction::Quit | KeyAction::CloseOverlay => self.probe.editing = false,
+                KeyAction::Activate | KeyAction::EndFilter => self.probe.editing = false,
+                KeyAction::FilterBackspace => self.probe.field_backspace(),
+                KeyAction::FilterChar(c) => self.probe.field_push(c),
+                KeyAction::NextFocus => self.probe_next_field(),
+                KeyAction::PrevFocus => self.probe_prev_field(),
+                _ => {}
+            }
+            return;
+        }
+
         if !matches!(key, KeyAction::ChordG) {
             self.pending_g = false;
         }
@@ -568,6 +609,8 @@ impl App {
             KeyAction::NextFocus => {
                 if self.screen == Screen::Scan && self.focus == FocusPane::Main {
                     self.scan_next_field();
+                } else if self.screen == Screen::Probe && self.focus == FocusPane::Main {
+                    self.probe_next_field();
                 } else {
                     self.cycle_focus(true);
                 }
@@ -575,6 +618,8 @@ impl App {
             KeyAction::PrevFocus => {
                 if self.screen == Screen::Scan && self.focus == FocusPane::Main {
                     self.scan_prev_field();
+                } else if self.screen == Screen::Probe && self.focus == FocusPane::Main {
+                    self.probe_prev_field();
                 } else {
                     self.cycle_focus(false);
                 }
@@ -584,14 +629,23 @@ impl App {
                 self.begin_audit_filter();
             }
             KeyAction::ScanStart if self.screen == Screen::Scan => self.start_scan(),
+            KeyAction::ScanStart if self.screen == Screen::Probe => self.start_probe(),
             KeyAction::ScanToggleDryRun if self.screen == Screen::Scan => {
                 self.toggle_scan_dry_run();
+            }
+            KeyAction::ScanToggleDryRun if self.screen == Screen::Probe => {
+                self.toggle_probe_dry_run();
             }
             KeyAction::ScanToggleSyn if self.screen == Screen::Scan => {
                 self.toggle_scan_syn();
             }
             KeyAction::Activate if self.screen == Screen::Scan && self.focus == FocusPane::Main => {
                 self.scan.editing = true;
+            }
+            KeyAction::Activate
+                if self.screen == Screen::Probe && self.focus == FocusPane::Main =>
+            {
+                self.probe.editing = true;
             }
             KeyAction::ListNext if self.audit_list_nav() => self.audit_select_next(),
             KeyAction::ListPrev if self.audit_list_nav() => self.audit_select_prev(),
@@ -605,6 +659,8 @@ impl App {
             KeyAction::ListBottom if self.jobs_list_nav() => self.job_select_last(),
             KeyAction::ListNext if self.scan_list_nav() => self.scan.select_next(),
             KeyAction::ListPrev if self.scan_list_nav() => self.scan.select_prev(),
+            KeyAction::ListNext if self.probe_list_nav() => self.probe.select_next(),
+            KeyAction::ListPrev if self.probe_list_nav() => self.probe.select_prev(),
             KeyAction::ChordG if self.key_preset == KeyPreset::Vim => {
                 if self.pending_g {
                     if self.audit_list_nav() {
@@ -648,6 +704,10 @@ impl App {
 
     fn scan_list_nav(&self) -> bool {
         self.screen == Screen::Scan && self.focus == FocusPane::Main && !self.scan.editing
+    }
+
+    fn probe_list_nav(&self) -> bool {
+        self.screen == Screen::Probe && self.focus == FocusPane::Main && !self.probe.editing
     }
 }
 

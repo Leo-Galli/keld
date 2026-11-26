@@ -1,0 +1,27 @@
+# Keld embedded service signatures (curated; not a full nmap database).
+# probe <name> ports=<csv|*> payload=<escaped string>
+# match <probe> <service> m/<regex>/[i] [product=<label>]
+#
+# Escapes in payload: \r \n \t \\ \0 \xHH
+# The null probe listens for unsolicited banners only.
+
+probe null ports=* payload=
+match null ssh m/^SSH-/i product=ssh
+match null ftp m/^220[\s-].*FTP/i product=ftp
+match null smtp m/^220[\s-]/i product=smtp
+match null pop3 m/^\+OK/i product=pop3
+match null imap m/^\* OK/i product=imap
+
+probe httpget ports=80,81,443,8000,8008,8080,8081,8443,8888 payload=GET / HTTP/1.0\r\nHost: keld\r\n\r\n
+match httpget http m/^HTTP\/1\.[01]/i product=http
+match httpget http m/^HTTP\/2/i product=http
+
+probe rtsp ports=554,8554 payload=OPTIONS * RTSP/1.0\r\nCSeq: 1\r\n\r\n
+match rtsp rtsp m/^RTSP\/1\.[01]/i product=rtsp
+
+probe redis ports=6379 payload=PING\r\n
+match redis redis m/^\+PONG/i product=redis
+match redis redis m/^-NOAUTH/i product=redis
+
+probe mqtt ports=1883,8883 payload=\x10\x0c\x00\x04MQTT\x04\x02\x00\x3c\x00\x00
+match mqtt mqtt m/^\x20/ product=mqtt

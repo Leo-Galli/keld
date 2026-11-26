@@ -5,6 +5,7 @@ pub mod commands;
 pub mod dashboard;
 pub mod keys;
 pub mod logo;
+pub mod probe_view;
 pub mod run;
 pub mod scan_view;
 pub mod screen;
