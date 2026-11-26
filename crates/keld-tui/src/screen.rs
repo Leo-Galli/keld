@@ -53,6 +53,25 @@ impl Screen {
         }
     }
 
+    /// Short label for the compact sidebar strip (< 100 cols).
+    pub fn abbrev(self) -> &'static str {
+        match self {
+            Screen::Dashboard => "Dash",
+            Screen::Scan => "Scan",
+            Screen::Probe => "Prob",
+            Screen::Tls => "TLS",
+            Screen::Http => "HTTP",
+            Screen::Fuzz => "Fuzz",
+            Screen::Dns => "DNS",
+            Screen::Net => "Net",
+            Screen::Hash => "Hash",
+            Screen::Reports => "Rpt",
+            Screen::Workspace => "Ws",
+            Screen::AuditLog => "Aud",
+            Screen::Settings => "Set",
+        }
+    }
+
     pub fn next(self) -> Self {
         let idx = Self::ALL.iter().position(|s| *s == self).unwrap_or(0);
         Self::ALL[(idx + 1) % Self::ALL.len()]

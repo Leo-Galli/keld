@@ -1,0 +1,24 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+KELD  ws:default  scope: 10.0.0.0/24                      12:00Z 
+┌ Dashboard ────────────────────────────────────────────────────┐
+│Dashboard (single-pane; Tab cycles modules, m toggles sidebar) │
+│                                                               │
+│Modules and jobs arrive in later tasks.                        │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
+ jobs:0  rate:0/s  err:0  |  Tab modules  m sidebar  ? help  q qu

@@ -1,18 +1,68 @@
-//! Rendering: splash + empty shell layout.
+//! Rendering: splash + responsive shell layout.
 
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
-use crate::app::{App, Phase};
+use crate::app::{App, FocusPane, Phase};
 use crate::logo::{self, WORDMARK};
 use crate::screen::Screen;
 
 const MIN_WIDTH: u16 = 60;
 const MIN_HEIGHT: u16 = 16;
 const SIDEBAR_BREAKPOINT: u16 = 100;
+const SINGLE_PANE_BREAKPOINT: u16 = 70;
+const SIDEBAR_FULL_WIDTH: u16 = 18;
+const SIDEBAR_COMPACT_WIDTH: u16 = 8;
+
+/// Responsive shell layout for the body area width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayoutMode {
+    /// >= 100 cols: full sidebar + main.
+    Full,
+    /// 70..99 cols: abbreviated sidebar strip + main.
+    Compact,
+    /// < 70 cols: main only (unless overlay forced).
+    Single,
+}
+
+impl LayoutMode {
+    pub fn from_width(width: u16) -> Self {
+        if width >= SIDEBAR_BREAKPOINT {
+            Self::Full
+        } else if width >= SINGLE_PANE_BREAKPOINT {
+            Self::Compact
+        } else {
+            Self::Single
+        }
+    }
+}
+
+/// Effective body layout after applying the `m` overlay toggle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShellBody {
+    FullSidebar,
+    CompactStrip,
+    MainOnly,
+}
+
+impl ShellBody {
+    pub fn resolve(mode: LayoutMode, overlay: bool) -> Self {
+        match mode {
+            LayoutMode::Full => Self::FullSidebar,
+            LayoutMode::Compact if overlay => Self::FullSidebar,
+            LayoutMode::Compact => Self::CompactStrip,
+            LayoutMode::Single if overlay => Self::FullSidebar,
+            LayoutMode::Single => Self::MainOnly,
+        }
+    }
+
+    pub fn shows_sidebar(self) -> bool {
+        !matches!(self, Self::MainOnly)
+    }
+}
 
 pub fn draw(frame: &mut Frame<'_>, app: &App) {
     let area = frame.area();
@@ -37,12 +87,7 @@ fn draw_too_small(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let p = Paragraph::new(msg)
         .style(app.theme.text_style())
         .alignment(Alignment::Center)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(app.theme.border_style(true))
-                .title("Keld"),
-        );
+        .block(panel_block(app, "Keld", true));
     frame.render_widget(p, area);
 }
 
@@ -126,26 +171,67 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
 }
 
 fn draw_body(frame: &mut Frame<'_>, area: Rect, app: &App) {
-    if area.width < SIDEBAR_BREAKPOINT {
-        draw_main(frame, area, app, true);
-        return;
-    }
+    let mode = LayoutMode::from_width(area.width);
+    let body = ShellBody::resolve(mode, app.sidebar_overlay);
 
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(18), Constraint::Min(20)])
-        .split(area);
-    draw_sidebar(frame, cols[0], app);
-    draw_main(frame, cols[1], app, false);
+    match body {
+        ShellBody::MainOnly => {
+            draw_main(frame, area, app, true, true);
+        }
+        ShellBody::CompactStrip => {
+            let cols = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Length(SIDEBAR_COMPACT_WIDTH),
+                    Constraint::Min(20),
+                ])
+                .split(area);
+            draw_sidebar(frame, cols[0], app, true);
+            draw_main(frame, cols[1], app, false, app.focus == FocusPane::Main);
+        }
+        ShellBody::FullSidebar => {
+            let cols = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Length(SIDEBAR_FULL_WIDTH), Constraint::Min(20)])
+                .split(area);
+            draw_sidebar(frame, cols[0], app, false);
+            draw_main(frame, cols[1], app, false, app.focus == FocusPane::Main);
+        }
+    }
 }
 
-fn draw_sidebar(frame: &mut Frame<'_>, area: Rect, app: &App) {
+fn panel_block<'a>(app: &'a App, title: impl Into<String>, focused: bool) -> Block<'a> {
+    let border_type = if app.ascii {
+        BorderType::Plain
+    } else {
+        BorderType::Rounded
+    };
+    Block::default()
+        .borders(Borders::ALL)
+        .border_type(border_type)
+        .border_style(app.theme.border_style(focused))
+        .title(title.into())
+}
+
+fn draw_sidebar(frame: &mut Frame<'_>, area: Rect, app: &App, compact: bool) {
     let marker = app.symbols.selected_marker();
+    let focused = app.focus == FocusPane::Sidebar;
     let items: Vec<Line<'_>> = Screen::ALL
         .iter()
         .map(|s| {
             let selected = *s == app.screen;
-            let prefix = if selected { marker.as_str() } else { "  " };
+            let label = if compact { s.abbrev() } else { s.title() };
+            let prefix = if selected {
+                if compact {
+                    app.symbols.bullet_on
+                } else {
+                    marker.as_str()
+                }
+            } else if compact {
+                " "
+            } else {
+                "  "
+            };
             let style = if selected {
                 Style::default()
                     .fg(app.theme.accent)
@@ -153,28 +239,29 @@ fn draw_sidebar(frame: &mut Frame<'_>, area: Rect, app: &App) {
             } else {
                 app.theme.text_style()
             };
-            Line::from(Span::styled(format!("{prefix}{}", s.title()), style))
+            Line::from(Span::styled(format!("{prefix}{label}"), style))
         })
         .collect();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(app.theme.border_style(true))
-        .title(" Modules ");
-    frame.render_widget(Paragraph::new(items).block(block), area);
+    let title = if compact { " Nav " } else { " Modules " };
+    frame.render_widget(
+        Paragraph::new(items).block(panel_block(app, title, focused)),
+        area,
+    );
 }
 
-fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, compact: bool) {
+fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, focused: bool) {
     let title = format!(" {} ", app.screen.title());
     let text = match app.screen {
-        Screen::Dashboard if compact => {
-            "Dashboard (sidebar collapsed; Tab cycles modules)\n\n\
+        Screen::Dashboard if single_pane => {
+            "Dashboard (single-pane; Tab cycles modules, m toggles sidebar)\n\n\
              Modules and jobs arrive in later tasks."
         }
         Screen::Dashboard => {
             "Workspace overview placeholder.\n\n\
              Findings chart, jobs and sparklines arrive in KL-010.\n\
-             Use Tab / Shift+Tab to change modules. q quits."
+             Tab moves focus. Up/Down change modules when sidebar focused.\n\
+             m toggles sidebar overlay below 100 cols. q quits."
         }
         _ => {
             "Module screen shell.\n\n\
@@ -182,21 +269,27 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, compact: bool) {
         }
     };
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(app.theme.border_style(true))
-        .title(title);
     frame.render_widget(
         Paragraph::new(text)
             .style(app.theme.text_style())
-            .block(block),
+            .block(panel_block(app, title, focused)),
         area,
     );
 }
 
 fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let mode = LayoutMode::from_width(area.width);
+    let focus_hint = match ShellBody::resolve(mode, app.sidebar_overlay) {
+        ShellBody::MainOnly => "Tab modules",
+        _ => "Tab focus",
+    };
+    let narrow_hint = if mode == LayoutMode::Full {
+        ""
+    } else {
+        "  m sidebar"
+    };
     let text = format!(
-        " jobs:0  rate:0/s  err:0  |  Tab modules  ? help  q quit  |  {}",
+        " jobs:0  rate:0/s  err:0  |  {focus_hint}{narrow_hint}  ? help  q quit  |  {}",
         app.screen.title()
     );
     frame.render_widget(
@@ -228,7 +321,6 @@ mod tests {
         let backend = TestBackend::new(width, height);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.draw(|f| draw(f, app)).unwrap();
-        // Snapshot character grid only (stable); ignore styles via Debug of cells' symbols
         let buf = terminal.backend().buffer();
         let mut out = String::new();
         for y in 0..height {
@@ -249,15 +341,62 @@ mod tests {
         }
     }
 
-    #[test]
-    fn shell_snapshot_80x24() {
+    fn shell_app() -> App {
         let mut app = App::new(test_opts(false));
         app.scope_summary = "10.0.0.0/24".into();
         app.clock_override = Some("12:00Z".into());
+        app
+    }
+
+    #[test]
+    fn layout_mode_breakpoints() {
+        assert_eq!(LayoutMode::from_width(100), LayoutMode::Full);
+        assert_eq!(LayoutMode::from_width(99), LayoutMode::Compact);
+        assert_eq!(LayoutMode::from_width(70), LayoutMode::Compact);
+        assert_eq!(LayoutMode::from_width(69), LayoutMode::Single);
+        assert_eq!(LayoutMode::from_width(60), LayoutMode::Single);
+    }
+
+    #[test]
+    fn shell_body_overlay_forces_full_sidebar() {
+        assert_eq!(
+            ShellBody::resolve(LayoutMode::Single, true),
+            ShellBody::FullSidebar
+        );
+        assert_eq!(
+            ShellBody::resolve(LayoutMode::Compact, true),
+            ShellBody::FullSidebar
+        );
+        assert_eq!(
+            ShellBody::resolve(LayoutMode::Single, false),
+            ShellBody::MainOnly
+        );
+    }
+
+    #[test]
+    fn shell_snapshot_80x24() {
+        let app = shell_app();
         let shot = render(&app, 80, 24);
         assert!(shot.contains("KELD"));
-        assert!(shot.contains("Dashboard"));
+        assert!(shot.contains("Dash"));
         assert_snapshot!("shell_80x24", shot);
+    }
+
+    #[test]
+    fn shell_snapshot_120x40() {
+        let app = shell_app();
+        let shot = render(&app, 120, 40);
+        assert!(shot.contains("Modules"));
+        assert!(shot.contains("Dashboard"));
+        assert_snapshot!("shell_120x40", shot);
+    }
+
+    #[test]
+    fn shell_snapshot_200x60() {
+        let app = shell_app();
+        let shot = render(&app, 200, 60);
+        assert!(shot.contains("Modules"));
+        assert_snapshot!("shell_200x60", shot);
     }
 
     #[test]
@@ -270,6 +409,25 @@ mod tests {
     fn too_small_snapshot() {
         let app = App::new(test_opts(false));
         assert_snapshot!("too_small_40x10", render(&app, 40, 10));
+    }
+
+    #[test]
+    fn single_pane_below_70() {
+        let app = shell_app();
+        let shot = render(&app, 65, 20);
+        assert!(shot.contains("single-pane"));
+        assert!(!shot.contains(" Modules "));
+        assert!(!shot.contains(" Nav "));
+        assert_snapshot!("shell_single_65x20", shot);
+    }
+
+    #[test]
+    fn focus_ring_main_when_cycled() {
+        let mut app = shell_app();
+        app.focus = FocusPane::Main;
+        let shot = render(&app, 120, 24);
+        assert!(shot.contains("Modules"));
+        assert!(shot.contains("Dashboard"));
     }
 
     #[test]

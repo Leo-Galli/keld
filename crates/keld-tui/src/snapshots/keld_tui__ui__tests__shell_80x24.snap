@@ -3,26 +3,26 @@ source: crates/keld-tui/src/ui.rs
 expression: shot
 ---
 KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
-┌ Dashboard ───────────────────────────────────────────────────────────────────┐
-│Dashboard (sidebar collapsed; Tab cycles modules)                             │
-│                                                                              │
-│Modules and jobs arrive in later tasks.                                       │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
- jobs:0  rate:0/s  err:0  |  Tab modules  ? help  q quit  |  Dashboard
+┌ Nav ─┐┌ Dashboard ───────────────────────────────────────────────────────────┐
+│*Dash ││Workspace overview placeholder.                                       │
+│ Scan ││                                                                      │
+│ Prob ││Findings chart, jobs and sparklines arrive in KL-010.                 │
+│ TLS  ││Tab moves focus. Up/Down change modules when sidebar focused.         │
+│ HTTP ││m toggles sidebar overlay below 100 cols. q quits.                    │
+│ Fuzz ││                                                                      │
+│ DNS  ││                                                                      │
+│ Net  ││                                                                      │
+│ Hash ││                                                                      │
+│ Rpt  ││                                                                      │
+│ Ws   ││                                                                      │
+│ Aud  ││                                                                      │
+│ Set  ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+└──────┘└──────────────────────────────────────────────────────────────────────┘
+ jobs:0  rate:0/s  err:0  |  Tab focus  m sidebar  ? help  q quit  |  Dashboard
