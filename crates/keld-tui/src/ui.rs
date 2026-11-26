@@ -290,6 +290,11 @@ fn draw_sidebar(frame: &mut Frame<'_>, area: Rect, app: &App, compact: bool) {
 }
 
 fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, focused: bool) {
+    if app.screen == Screen::AuditLog {
+        draw_audit(frame, area, app, focused);
+        return;
+    }
+
     let title = format!(" {} ", app.screen.title());
     let text = match app.screen {
         Screen::Dashboard if single_pane => {
@@ -316,6 +321,98 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, fo
     );
 }
 
+fn draw_audit(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
+    let path = app.audit_path.display();
+    let filter_label = if app.audit_filtering {
+        format!("filter: {}_", app.audit_filter)
+    } else if app.audit_filter.is_empty() {
+        "filter: (none)  / to filter".into()
+    } else {
+        format!("filter: {}  / edit  Esc clear", app.audit_filter)
+    };
+    let title = format!(" Audit log  {path} ");
+
+    let filtered = app.audit_filtered();
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(Span::styled(filter_label, app.theme.muted_style())),
+        Line::from(Span::styled(
+            format!(
+                " {:<20} {:<8} {:<16} {:<14} {}",
+                "time", "module", "target", "params", "outcome"
+            ),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    if filtered.is_empty() {
+        lines.push(Line::from(Span::styled(
+            if app.audit_entries.is_empty() {
+                "(no audit entries yet)"
+            } else {
+                "(no matches)"
+            },
+            app.theme.muted_style(),
+        )));
+    } else {
+        let header_rows = 2u16;
+        let inner_h = area.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(header_rows) as usize;
+        let selected = app.audit_selected.min(filtered.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, entry) in filtered.iter().enumerate().skip(start).take(visible.max(1)) {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let row = format!(
+                "{marker}{:<20} {:<8} {:<16} {:<14} {}",
+                truncate(&entry.timestamp, 20, app.ascii),
+                truncate(&entry.module, 8, app.ascii),
+                truncate(&entry.target, 16, app.ascii),
+                truncate(&entry.parameters, 14, app.ascii),
+                entry.outcome
+            );
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(row, style)));
+        }
+    }
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(app.theme.text_style())
+            .block(panel_block(app, title, focused)),
+        area,
+    );
+}
+
+fn truncate(s: &str, max: usize, ascii: bool) -> String {
+    let count = s.chars().count();
+    if count <= max {
+        return s.to_string();
+    }
+    if max <= 1 {
+        return s.chars().take(max).collect();
+    }
+    let mark = if ascii { "." } else { "…" };
+    let take = max.saturating_sub(mark.chars().count());
+    let mut out: String = s.chars().take(take).collect();
+    out.push_str(mark);
+    out
+}
+
 fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let mode = LayoutMode::from_width(area.width);
     let focus_hint = match ShellBody::resolve(mode, app.sidebar_overlay) {
@@ -327,8 +424,17 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
     } else {
         "  m sidebar"
     };
+    let audit_hint = if app.screen == Screen::AuditLog {
+        if app.audit_filtering {
+            "  Enter done  Esc clear"
+        } else {
+            "  / filter  j/k select"
+        }
+    } else {
+        ""
+    };
     let text = format!(
-        " scope: {}  jobs:0  rate:0/s  err:0  |  {focus_hint}{narrow_hint}  ? help  q quit  |  {}",
+        " scope: {}  jobs:0  rate:0/s  err:0  |  {focus_hint}{narrow_hint}{audit_hint}  ? help  q quit  |  {}",
         app.scope_summary,
         app.screen.title()
     );
@@ -381,6 +487,8 @@ mod tests {
             needs_ack: false,
             config_path: std::path::PathBuf::from("keld.toml"),
             scope_summary: "(no scope)".into(),
+            audit_entries: Vec::new(),
+            audit_path: std::path::PathBuf::from("audit.jsonl"),
         }
     }
 
@@ -484,6 +592,8 @@ mod tests {
             needs_ack: false,
             config_path: std::path::PathBuf::from("keld.toml"),
             scope_summary: "(no scope)".into(),
+            audit_entries: Vec::new(),
+            audit_path: std::path::PathBuf::from("audit.jsonl"),
         });
         app.clock_override = Some("12:00Z".into());
         let shot = render(&app, 120, 24);
@@ -500,6 +610,8 @@ mod tests {
             needs_ack: true,
             config_path: std::path::PathBuf::from("keld.toml"),
             scope_summary: "(no scope)".into(),
+            audit_entries: Vec::new(),
+            audit_path: std::path::PathBuf::from("audit.jsonl"),
         });
         assert_eq!(app.phase, Phase::Acknowledge);
         let shot = render(&app, 80, 24);
@@ -509,5 +621,63 @@ mod tests {
         app.ack_checked = true;
         let shot = render(&app, 80, 24);
         assert!(shot.contains("[x]"));
+    }
+
+    #[test]
+    fn audit_snapshot_80x24() {
+        use keld_core::{AuditEntry, AuditOutcome};
+        let mut app = shell_app();
+        app.screen = Screen::AuditLog;
+        app.focus = FocusPane::Main;
+        app.audit_path = std::path::PathBuf::from("audit.jsonl");
+        app.audit_entries = vec![
+            AuditEntry {
+                timestamp: "2026-11-26T10:00:00Z".into(),
+                module: "scan".into(),
+                target: "10.0.0.5".into(),
+                parameters: "ports=1-1024".into(),
+                outcome: AuditOutcome::Ok,
+            },
+            AuditEntry {
+                timestamp: "2026-11-26T10:01:00Z".into(),
+                module: "http".into(),
+                target: "app.example.com".into(),
+                parameters: "headers".into(),
+                outcome: AuditOutcome::Denied,
+            },
+        ];
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Audit log"));
+        assert!(shot.contains("scan"));
+        assert!(shot.contains("10.0.0.5"));
+        assert!(shot.contains("denied") || shot.contains("Denied") || shot.contains("ok"));
+        assert_snapshot!("audit_80x24", shot);
+    }
+
+    #[test]
+    fn audit_filter_hides_rows() {
+        use keld_core::{AuditEntry, AuditOutcome};
+        let mut app = shell_app();
+        app.screen = Screen::AuditLog;
+        app.audit_entries = vec![
+            AuditEntry {
+                timestamp: "2026-11-26T10:00:00Z".into(),
+                module: "scan".into(),
+                target: "10.0.0.5".into(),
+                parameters: "ports=22".into(),
+                outcome: AuditOutcome::Ok,
+            },
+            AuditEntry {
+                timestamp: "2026-11-26T11:00:00Z".into(),
+                module: "tls".into(),
+                target: "app.example.com".into(),
+                parameters: "sni".into(),
+                outcome: AuditOutcome::Error,
+            },
+        ];
+        app.audit_filter = "tls".into();
+        let shot = render(&app, 120, 24);
+        assert!(shot.contains("tls"));
+        assert!(!shot.contains("10.0.0.5"));
     }
 }

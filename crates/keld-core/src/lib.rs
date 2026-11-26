@@ -3,11 +3,16 @@
 //! Modules, CLI and TUI build on this crate. Active scanning logic lives in
 //! `keld-modules`; this crate stays free of network I/O for now.
 
+pub mod audit;
 pub mod config;
 pub mod event;
 pub mod job;
 pub mod scope;
 
+pub use audit::{
+    default_audit_path, format_rfc3339_utc, AuditEntry, AuditError, AuditLog, AuditOutcome,
+    DEFAULT_AUDIT_FILE,
+};
 pub use config::{
     load, merge, persist_authorized_ack, project_config_path, save, user_config_path, Config,
     ConfigError, ConfigFile, ConfigOverrides, ConfigWarning, LoadedConfig, ThemeName,

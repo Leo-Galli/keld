@@ -14,6 +14,7 @@ use ratatui::Terminal;
 use thiserror::Error;
 
 use crate::app::{App, FocusPane, KeyAction, Phase, TuiOptions};
+use crate::screen::Screen;
 use crate::ui::{self, LayoutMode, ShellBody};
 
 const SPLASH_DURATION: Duration = Duration::from_millis(1200);
@@ -118,10 +119,23 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         };
     }
 
+    if app.audit_filtering {
+        return match code {
+            KeyCode::Esc => Some(KeyAction::Quit),
+            KeyCode::Enter => Some(KeyAction::EndFilter),
+            KeyCode::Backspace => Some(KeyAction::FilterBackspace),
+            KeyCode::Char(c) => Some(KeyAction::FilterChar(c)),
+            _ => None,
+        };
+    }
+
     let dual = sidebar_visible(app, width);
+    let audit_list = app.screen == Screen::AuditLog && (!dual || app.focus == FocusPane::Main);
+
     match code {
         KeyCode::Char('q') | KeyCode::Esc => Some(KeyAction::Quit),
         KeyCode::Char('m') => Some(KeyAction::ToggleSidebar),
+        KeyCode::Char('/') if app.screen == Screen::AuditLog => Some(KeyAction::BeginFilter),
         KeyCode::Tab => {
             if dual {
                 Some(KeyAction::NextFocus)
@@ -136,6 +150,8 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
                 Some(KeyAction::PrevScreen)
             }
         }
+        KeyCode::Up | KeyCode::Char('k') if audit_list => Some(KeyAction::ListPrev),
+        KeyCode::Down | KeyCode::Char('j') if audit_list => Some(KeyAction::ListNext),
         KeyCode::Up | KeyCode::Char('k') if !dual || app.focus == FocusPane::Sidebar => {
             Some(KeyAction::PrevScreen)
         }
