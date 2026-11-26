@@ -19,6 +19,8 @@ pub struct TuiOptions {
     pub needs_ack: bool,
     /// Where to persist acknowledgement (and future settings).
     pub config_path: PathBuf,
+    /// Active scope summary for header and status bar.
+    pub scope_summary: String,
 }
 
 impl Default for TuiOptions {
@@ -30,6 +32,7 @@ impl Default for TuiOptions {
             theme_id: ThemeId::Dark,
             needs_ack: true,
             config_path: PathBuf::from("keld.toml"),
+            scope_summary: "(no scope)".into(),
         }
     }
 }
@@ -101,7 +104,7 @@ impl App {
             symbols: Symbols::for_mode(opts.ascii),
             should_quit: false,
             workspace_name: "default".into(),
-            scope_summary: "(no scope)".into(),
+            scope_summary: opts.scope_summary,
             clock_override: None,
             ack_checked: false,
             needs_ack: opts.needs_ack,
@@ -228,6 +231,7 @@ mod tests {
             theme_id: ThemeId::Dark,
             needs_ack,
             config_path: PathBuf::from("keld.toml"),
+            scope_summary: "(no scope)".into(),
         }
     }
 

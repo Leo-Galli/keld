@@ -328,7 +328,8 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         "  m sidebar"
     };
     let text = format!(
-        " jobs:0  rate:0/s  err:0  |  {focus_hint}{narrow_hint}  ? help  q quit  |  {}",
+        " scope: {}  jobs:0  rate:0/s  err:0  |  {focus_hint}{narrow_hint}  ? help  q quit  |  {}",
+        app.scope_summary,
         app.screen.title()
     );
     frame.render_widget(
@@ -379,6 +380,7 @@ mod tests {
             theme_id: crate::theme::ThemeId::Dark,
             needs_ack: false,
             config_path: std::path::PathBuf::from("keld.toml"),
+            scope_summary: "(no scope)".into(),
         }
     }
 
@@ -420,6 +422,7 @@ mod tests {
         let shot = render(&app, 80, 24);
         assert!(shot.contains("KELD"));
         assert!(shot.contains("Dash"));
+        assert!(shot.contains("scope: 10.0.0.0/24"));
         assert_snapshot!("shell_80x24", shot);
     }
 
@@ -480,6 +483,7 @@ mod tests {
             theme_id: crate::theme::ThemeId::Dark,
             needs_ack: false,
             config_path: std::path::PathBuf::from("keld.toml"),
+            scope_summary: "(no scope)".into(),
         });
         app.clock_override = Some("12:00Z".into());
         let shot = render(&app, 120, 24);
@@ -495,6 +499,7 @@ mod tests {
             theme_id: crate::theme::ThemeId::Dark,
             needs_ack: true,
             config_path: std::path::PathBuf::from("keld.toml"),
+            scope_summary: "(no scope)".into(),
         });
         assert_eq!(app.phase, Phase::Acknowledge);
         let shot = render(&app, 80, 24);

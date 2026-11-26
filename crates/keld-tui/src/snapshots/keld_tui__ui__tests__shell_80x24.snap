@@ -25,4 +25,4 @@ KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z
 │      ││                                                                      │
 │      ││                                                                      │
 └──────┘└──────────────────────────────────────────────────────────────────────┘
- jobs:0  rate:0/s  err:0  |  Tab focus  m sidebar  ? help  q quit  |  Dashboard
+ scope: 10.0.0.0/24  jobs:0  rate:0/s  err:0  |  Tab focus  m sidebar  ? help  q

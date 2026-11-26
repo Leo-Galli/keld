@@ -54,7 +54,7 @@ Every active module requires a target scope (`scope.toml` or explicit targets). 
 ## Data model (sketch)
 
 - `Target`: host / IP / CIDR / URL + ports
-- `Scope`: includes, excludes, notes; validated before jobs
+- `Scope`: includes, excludes, notes; validated before jobs (`scope.toml`, `--scope`); IP/CIDR/hostname/URL-host; excludes win; `Scope::check` / TUI status summary
 - `Finding`: id, severity, module, target, title, evidence, timestamps
 - `Job`: id, module, state, progress, started/finished, counts
 - `AuditEntry`: timestamp, module, target, params, outcome
