@@ -2,16 +2,17 @@
 
 ## Current task
 
-**KL-009** -- Command palette + help overlay + keybinding presets (vim/arrows)
+**KL-010** -- Dashboard screen with placeholder charts/sparklines; Jobs list screen
 
 Acceptance:
-- `:` opens a fuzzy command palette over every registered action
-- `?` shows a help overlay with the active keybinding preset
-- Vim-style and arrow-key presets selectable (config/settings later wire in KL-023; presets exist and switch now)
-- Snapshot tests for palette and help at least at 80x24
+- Dashboard shows workspace overview, findings-by-severity bar chart (placeholder data OK), recent jobs, RPS sparkline, open-ports summary
+- Jobs list screen: running and finished jobs with progress, duration, result counts
+- Jobs keep running when switching screens (engine wiring stub OK if events already support it)
+- Snapshot tests for Dashboard and Jobs at least at 80x24
 
 ## Done
 
+- **KL-009** -- Command palette + help overlay + keybinding presets (vim/arrows) -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/17
 - **KL-008** -- CLI framework: global flags, `--json`, colored output, Ctrl+C partial-save hook skeleton, `keld doctor` stub -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/15
 - **KL-007** -- Audit log (file + API); Audit log TUI viewer (read-only) -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/13
 - **KL-006** -- Scope model + `scope.toml` parse/validate/exclude; refuse out-of-scope; status-bar scope summary -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/11
@@ -31,6 +32,7 @@ Acceptance:
 
 ## Decisions log
 
+- 2026-11-26: Command palette uses in-crate fuzzy substring scoring (no extra crate); palette selection always Up/Down so j/k remain typeable; Esc closes overlays without quitting; Vim vs Arrows are mutually exclusive for list/sidebar nav; preset switch via palette until KL-023 Settings
 - 2026-11-26: CLI subcommands via clap `Option<Commands>` (no args still opens TUI); `--json`/`--dry-run`/`--rate`/`--concurrency` are global; colors are hand-rolled ANSI (no extra crate); Ctrl+C uses tokio signal on a helper thread + one-shot saver; doctor is stub checks only
 - 2026-11-26: Audit log is append-only JSONL (`audit.jsonl`); default `./audit.jsonl` else user data dir; TUI viewer is read-only with `/` filter and j/k select
 - 2026-11-26: Scope entries are IP, CIDR, or hostname (URL hosts stripped); no DNS in the gate; excludes win; empty includes invalid; summary `first (+n, ex:m)` for status/header
@@ -49,7 +51,6 @@ Acceptance:
 
 ### Foundation
 
-- **KL-009** -- Command palette + help overlay + keybinding presets (vim/arrows)
 - **KL-010** -- Dashboard screen with placeholder charts/sparklines; Jobs list screen
 
 ### Modules
