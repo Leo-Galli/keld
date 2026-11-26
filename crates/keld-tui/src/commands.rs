@@ -80,6 +80,11 @@ const COMMANDS: &[Command] = &[
         keywords: "project sqlite",
     },
     Command {
+        id: CommandId::GoTo(Screen::Jobs),
+        label: "Go to Jobs",
+        keywords: "running progress tasks",
+    },
+    Command {
         id: CommandId::GoTo(Screen::AuditLog),
         label: "Go to Audit log",
         keywords: "audit history",

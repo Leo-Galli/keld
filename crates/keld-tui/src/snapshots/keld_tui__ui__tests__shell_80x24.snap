@@ -4,25 +4,25 @@ expression: shot
 ---
 KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
 ┌ Nav ─┐┌ Dashboard ───────────────────────────────────────────────────────────┐
-│*Dash ││Workspace overview placeholder.                                       │
+│*Dash ││ws:default  findings:13  open ports:3                                 │
 │ Scan ││                                                                      │
-│ Prob ││Findings chart, jobs and sparklines arrive in KL-010.                 │
-│ TLS  ││Tab moves focus. Up/Down change modules when sidebar focused.         │
-│ HTTP ││m toggles sidebar overlay below 100 cols. q quits.                    │
-│ Fuzz ││                                                                      │
-│ DNS  ││                                                                      │
-│ Net  ││                                                                      │
+│ Prob ││Findings by severity                                                  │
+│ TLS  ││critical ####------  2                                                │
+│ HTTP ││high     ##########  5                                                │
+│ Fuzz ││medium   ######----  3                                                │
+│ DNS  ││low      ####------  2                                                │
+│ Net  ││info     ##--------  1                                                │
 │ Hash ││                                                                      │
-│ Rpt  ││                                                                      │
+│ Rpt  ││Requests/s  __-=#=-___-=--_  8/s                                      │
 │ Ws   ││                                                                      │
-│ Aud  ││                                                                      │
-│ Set  ││                                                                      │
+│ Jobs ││Recent jobs                                                           │
+│ Aud  ││ j-00  http   running   34%  2 open                                   │
+│ Set  ││ j-01  scan   done     100%  12 open                                  │
 │      ││                                                                      │
-│      ││                                                                      │
-│      ││                                                                      │
-│      ││                                                                      │
+│      ││Open ports (top)                                                      │
+│      ││22/tcp  80/tcp  443/tcp                                               │
 │      ││                                                                      │
 │      ││                                                                      │
 │      ││                                                                      │
 └──────┘└──────────────────────────────────────────────────────────────────────┘
- scope: 10.0.0.0/24  jobs:0  rate:0/s  err:0  |  Tab focus  m sidebar  : cmd  ?
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  m sidebar  : cmd  ?

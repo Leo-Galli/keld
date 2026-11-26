@@ -4,23 +4,23 @@ expression: shot
 ---
 KELD  ws:default  scope: 10.0.0.0/24                                                                                                                                                             12:00Z 
 ┌ Modules ───────┐┌ Dashboard ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│> Dashboard     ││Workspace overview placeholder.                                                                                                                                                     │
+│> Dashboard     ││ws:default  findings:13  open ports:3                                                                                                                                               │
 │  Scan          ││                                                                                                                                                                                    │
-│  Probe         ││Findings chart, jobs and sparklines arrive in KL-010.                                                                                                                               │
-│  TLS           ││Tab moves focus. Up/Down change modules when sidebar focused.                                                                                                                       │
-│  HTTP          ││m toggles sidebar overlay below 100 cols. q quits.                                                                                                                                  │
-│  Fuzz          ││                                                                                                                                                                                    │
-│  DNS           ││                                                                                                                                                                                    │
-│  Net           ││                                                                                                                                                                                    │
+│  Probe         ││Findings by severity                                                                                                                                                                │
+│  TLS           ││critical ####------  2                                                                                                                                                              │
+│  HTTP          ││high     ##########  5                                                                                                                                                              │
+│  Fuzz          ││medium   ######----  3                                                                                                                                                              │
+│  DNS           ││low      ####------  2                                                                                                                                                              │
+│  Net           ││info     ##--------  1                                                                                                                                                              │
 │  Hash          ││                                                                                                                                                                                    │
-│  Reports       ││                                                                                                                                                                                    │
+│  Reports       ││Requests/s  __-=#=-___-=--_  8/s                                                                                                                                                    │
 │  Workspace     ││                                                                                                                                                                                    │
-│  Audit log     ││                                                                                                                                                                                    │
-│  Settings      ││                                                                                                                                                                                    │
+│  Jobs          ││Recent jobs                                                                                                                                                                         │
+│  Audit log     ││ j-00  http   running   34%  2 open                                                                                                                                                 │
+│  Settings      ││ j-01  scan   done     100%  12 open                                                                                                                                                │
 │                ││                                                                                                                                                                                    │
-│                ││                                                                                                                                                                                    │
-│                ││                                                                                                                                                                                    │
-│                ││                                                                                                                                                                                    │
+│                ││Open ports (top)                                                                                                                                                                    │
+│                ││22/tcp  80/tcp  443/tcp                                                                                                                                                             │
 │                ││                                                                                                                                                                                    │
 │                ││                                                                                                                                                                                    │
 │                ││                                                                                                                                                                                    │
@@ -61,4 +61,4 @@ KELD  ws:default  scope: 10.0.0.0/24                                            
 │                ││                                                                                                                                                                                    │
 │                ││                                                                                                                                                                                    │
 └────────────────┘└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- scope: 10.0.0.0/24  jobs:0  rate:0/s  err:0  |  Tab focus  : cmd  ? help  q quit  |  Dashboard [Vim]
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  : cmd  ? help  q quit  |  Dashboard [Vim]

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Dashboard screen: workspace overview, findings-by-severity bars, RPS sparkline, recent jobs, open-ports summary (placeholder data); Jobs list screen with progress/duration/results; jobs keep advancing across screen switches
 - Command palette (`:`), help overlay (`?`), and Vim / Arrows keybinding presets (switch via palette; Settings persistence in KL-023)
 - CLI framework: subcommands (`keld doctor`), global `--json` / `--dry-run` / `--rate` / `--concurrency`, colored human output (`NO_COLOR` / `--no-color`), Ctrl+C partial-save hook skeleton
 - Audit log: append-only JSONL API (`AuditLog` / `AuditEntry`); `--audit-log` flag; read-only Audit log TUI screen with filter (`/`) and scroll
