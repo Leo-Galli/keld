@@ -14,6 +14,7 @@ pub enum Screen {
     Hash,
     Reports,
     Workspace,
+    Jobs,
     AuditLog,
     Settings,
 }
@@ -31,6 +32,7 @@ impl Screen {
         Screen::Hash,
         Screen::Reports,
         Screen::Workspace,
+        Screen::Jobs,
         Screen::AuditLog,
         Screen::Settings,
     ];
@@ -48,6 +50,7 @@ impl Screen {
             Screen::Hash => "Hash",
             Screen::Reports => "Reports",
             Screen::Workspace => "Workspace",
+            Screen::Jobs => "Jobs",
             Screen::AuditLog => "Audit log",
             Screen::Settings => "Settings",
         }
@@ -67,6 +70,7 @@ impl Screen {
             Screen::Hash => "Hash",
             Screen::Reports => "Rpt",
             Screen::Workspace => "Ws",
+            Screen::Jobs => "Jobs",
             Screen::AuditLog => "Aud",
             Screen::Settings => "Set",
         }

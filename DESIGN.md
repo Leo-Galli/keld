@@ -73,6 +73,8 @@ Vertical gradient primary -> secondary on the block. Tagline and version below, 
 | Dashboard|                                                         |
 | Scan     |                                                         |
 | ...      |                                                         |
+| Jobs     |                                                         |
+| Audit    |                                                         |
 | Settings |                                                         |
 +----------+---------------------------------------------------------+
 | STATUS: jobs | rate | errors | key hints                           |

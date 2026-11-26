@@ -7,6 +7,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::{App, FocusPane, Overlay, Phase};
+use crate::dashboard::{self, severity_label};
 use crate::logo::{self, WORDMARK};
 use crate::screen::Screen;
 
@@ -297,31 +298,200 @@ fn draw_sidebar(frame: &mut Frame<'_>, area: Rect, app: &App, compact: bool) {
 }
 
 fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, focused: bool) {
-    if app.screen == Screen::AuditLog {
-        draw_audit(frame, area, app, focused);
-        return;
+    match app.screen {
+        Screen::AuditLog => draw_audit(frame, area, app, focused),
+        Screen::Dashboard => draw_dashboard(frame, area, app, single_pane, focused),
+        Screen::Jobs => draw_jobs(frame, area, app, focused),
+        _ => {
+            let title = format!(" {} ", app.screen.title());
+            frame.render_widget(
+                Paragraph::new(
+                    "Module screen shell.\n\n\
+                     Target form, results table and job controls arrive with the module tasks.",
+                )
+                .style(app.theme.text_style())
+                .block(panel_block(app, title, focused)),
+                area,
+            );
+        }
+    }
+}
+
+fn draw_dashboard(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, focused: bool) {
+    let title = if single_pane {
+        " Dashboard  (Tab modules  m sidebar) "
+    } else {
+        " Dashboard "
+    };
+    let dash = &app.dashboard;
+    let max_findings = dash.findings.iter().map(|f| f.count).max().unwrap_or(1);
+    let bar_w = if area.width < 50 { 6 } else { 10 };
+    let spark_w = (area.width.saturating_sub(28) as usize).clamp(8, 20);
+
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(Span::styled(
+            format!(
+                "ws:{}  findings:{}  open ports:{}",
+                app.workspace_name,
+                dash.findings_total(),
+                dash.open_ports.len()
+            ),
+            app.theme.muted_style(),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Findings by severity",
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    for f in &dash.findings {
+        let bar = dashboard::bar(f.count, max_findings, bar_w, app.ascii);
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{:<8} ", severity_label(f.severity)),
+                app.theme.severity_style(f.severity),
+            ),
+            Span::styled(bar, app.theme.severity_style(f.severity)),
+            Span::styled(format!("  {}", f.count), app.theme.text_style()),
+        ]));
     }
 
-    let title = format!(" {} ", app.screen.title());
-    let text = match app.screen {
-        Screen::Dashboard if single_pane => {
-            "Dashboard (single-pane; Tab cycles modules, m toggles sidebar)\n\n\
-             Modules and jobs arrive in later tasks."
-        }
-        Screen::Dashboard => {
-            "Workspace overview placeholder.\n\n\
-             Findings chart, jobs and sparklines arrive in KL-010.\n\
-             Tab moves focus. Up/Down change modules when sidebar focused.\n\
-             m toggles sidebar overlay below 100 cols. q quits."
-        }
-        _ => {
-            "Module screen shell.\n\n\
-             Target form, results table and job controls arrive with the module tasks."
-        }
-    };
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled(
+            "Requests/s  ",
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            dashboard::sparkline(&dash.rps_samples, spark_w, app.ascii),
+            Style::default().fg(app.theme.accent_secondary),
+        ),
+        Span::styled(
+            format!("  {}/s", dash.current_rate()),
+            app.theme.muted_style(),
+        ),
+    ]));
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "Recent jobs",
+        Style::default()
+            .fg(app.theme.accent)
+            .add_modifier(Modifier::BOLD),
+    )));
+    for job in dash.jobs.iter().take(4) {
+        let prog = job
+            .progress_pct()
+            .map(|p| format!("{p}%"))
+            .unwrap_or_else(|| "--".into());
+        lines.push(Line::from(Span::styled(
+            format!(
+                " {}  {:<6} {:<8} {:>4}  {}",
+                job.id_label(),
+                job.job.module.as_str(),
+                job.state_label(),
+                prog,
+                job.results_label
+            ),
+            app.theme.text_style(),
+        )));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "Open ports (top)",
+        Style::default()
+            .fg(app.theme.accent)
+            .add_modifier(Modifier::BOLD),
+    )));
+    if dash.open_ports.is_empty() {
+        lines.push(Line::from(Span::styled(
+            " (none yet)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let ports: String = dash
+            .open_ports
+            .iter()
+            .map(|p| format!("{}/{}", p.port, p.proto))
+            .collect::<Vec<_>>()
+            .join("  ");
+        lines.push(Line::from(Span::styled(ports, app.theme.text_style())));
+    }
 
     frame.render_widget(
-        Paragraph::new(text)
+        Paragraph::new(lines)
+            .style(app.theme.text_style())
+            .block(panel_block(app, title, focused)),
+        area,
+    );
+}
+
+fn draw_jobs(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
+    let title = " Jobs ";
+    let mut lines: Vec<Line<'_>> = vec![Line::from(Span::styled(
+        format!(
+            " {:<6} {:<8} {:<9} {:>8} {:>8}  {}",
+            "id", "module", "state", "progress", "duration", "results"
+        ),
+        Style::default()
+            .fg(app.theme.accent)
+            .add_modifier(Modifier::BOLD),
+    ))];
+
+    let jobs = &app.dashboard.jobs;
+    if jobs.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "(no jobs yet)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let header_rows = 1u16;
+        let inner_h = area.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(header_rows) as usize;
+        let selected = app.job_selected.min(jobs.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, job) in jobs.iter().enumerate().skip(start).take(visible.max(1)) {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let prog = job
+                .progress_pct()
+                .map(|p| format!("{p}%"))
+                .unwrap_or_else(|| "--".into());
+            let row = format!(
+                "{marker}{:<6} {:<8} {:<9} {:>8} {:>8}  {}",
+                job.id_label(),
+                job.job.module.as_str(),
+                job.state_label(),
+                prog,
+                job.duration_label(),
+                job.results_label
+            );
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(row, style)));
+        }
+    }
+
+    frame.render_widget(
+        Paragraph::new(lines)
             .style(app.theme.text_style())
             .block(panel_block(app, title, focused)),
         area,
@@ -435,18 +605,18 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         crate::keys::KeyPreset::Vim => "j/k",
         crate::keys::KeyPreset::Arrows => "Up/Down",
     };
-    let audit_hint = if app.screen == Screen::AuditLog {
-        if app.audit_filtering {
-            "  Enter done  Esc clear".to_string()
-        } else {
-            format!("  / filter  {list_hint} select")
-        }
-    } else {
-        String::new()
+    let list_screen_hint = match app.screen {
+        Screen::AuditLog if app.audit_filtering => "  Enter done  Esc clear".to_string(),
+        Screen::AuditLog => format!("  / filter  {list_hint} select"),
+        Screen::Jobs => format!("  {list_hint} select"),
+        _ => String::new(),
     };
     let text = format!(
-        " scope: {}  jobs:0  rate:0/s  err:0  |  {focus_hint}{narrow_hint}{audit_hint}  : cmd  ? help  q quit  |  {} [{}]",
+        " scope: {}  jobs:{}  rate:{}/s  err:{}  |  {focus_hint}{narrow_hint}{list_screen_hint}  : cmd  ? help  q quit  |  {} [{}]",
         app.scope_summary,
+        app.dashboard.running_count(),
+        app.dashboard.current_rate(),
+        app.dashboard.error_count(),
         app.screen.title(),
         app.key_preset.label()
     );
@@ -689,10 +859,49 @@ mod tests {
     fn single_pane_below_70() {
         let app = shell_app();
         let shot = render(&app, 65, 20);
-        assert!(shot.contains("single-pane"));
+        assert!(shot.contains("Dashboard"));
+        assert!(shot.contains("Findings"));
         assert!(!shot.contains(" Modules "));
         assert!(!shot.contains(" Nav "));
         assert_snapshot!("shell_single_65x20", shot);
+    }
+
+    #[test]
+    fn dashboard_snapshot_80x24() {
+        let app = shell_app();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Findings by severity"));
+        assert!(shot.contains("Requests/s"));
+        assert!(shot.contains("Recent jobs"));
+        assert!(shot.contains("Open ports"));
+        assert!(shot.contains("critical") || shot.contains("high"));
+        assert_snapshot!("dashboard_80x24", shot);
+    }
+
+    #[test]
+    fn jobs_snapshot_80x24() {
+        let mut app = shell_app();
+        app.screen = Screen::Jobs;
+        app.focus = FocusPane::Main;
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Jobs"));
+        assert!(shot.contains("module"));
+        assert!(shot.contains("running") || shot.contains("done"));
+        assert!(shot.contains("j-00") || shot.contains("j-01"));
+        assert_snapshot!("jobs_80x24", shot);
+    }
+
+    #[test]
+    fn jobs_persist_when_switching_screens() {
+        let mut app = shell_app();
+        let before = app.dashboard.jobs[0].job.done;
+        app.screen = Screen::Scan;
+        for _ in 0..30 {
+            app.on_tick();
+        }
+        assert_eq!(app.dashboard.jobs[0].job.done, before + 1);
+        app.screen = Screen::Jobs;
+        assert_eq!(app.dashboard.jobs[0].job.done, before + 1);
     }
 
     #[test]

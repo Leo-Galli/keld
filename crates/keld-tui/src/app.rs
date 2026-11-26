@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use keld_core::{AuditEntry, ThemeName};
 
 use crate::commands::{self, CommandId};
+use crate::dashboard::DashboardState;
 use crate::keys::KeyPreset;
 use crate::screen::Screen;
 use crate::symbols::Symbols;
@@ -116,6 +117,12 @@ pub struct App {
     pub palette_selected: usize,
     /// Vim `g` chord: waiting for a second `g`.
     pub pending_g: bool,
+    /// Dashboard / Jobs shared state (jobs keep running across screen switches).
+    pub dashboard: DashboardState,
+    /// Selected row on the Jobs screen.
+    pub job_selected: usize,
+    /// Tick accumulator so job elapsed advances ~1s even at 30 FPS.
+    tick_accum: u32,
 }
 
 impl App {
@@ -154,6 +161,53 @@ impl App {
             palette_query: String::new(),
             palette_selected: 0,
             pending_g: false,
+            dashboard: DashboardState::placeholder(),
+            job_selected: 0,
+            tick_accum: 0,
+        }
+    }
+
+    /// Called from the event loop on idle ticks; advances running jobs regardless of screen.
+    pub fn on_tick(&mut self) {
+        if self.phase != Phase::Shell {
+            return;
+        }
+        // ~30 FPS tick; advance job clocks once per ~30 ticks (~1s).
+        self.tick_accum = self.tick_accum.saturating_add(1);
+        if self.tick_accum < 30 {
+            return;
+        }
+        self.tick_accum = 0;
+        self.dashboard.tick();
+    }
+
+    pub fn job_select_next(&mut self) {
+        let len = self.dashboard.jobs.len();
+        if len == 0 {
+            self.job_selected = 0;
+            return;
+        }
+        self.job_selected = (self.job_selected + 1).min(len - 1);
+    }
+
+    pub fn job_select_prev(&mut self) {
+        self.job_selected = self.job_selected.saturating_sub(1);
+    }
+
+    pub fn job_select_first(&mut self) {
+        self.job_selected = 0;
+    }
+
+    pub fn job_select_last(&mut self) {
+        self.job_selected = self.dashboard.jobs.len().saturating_sub(1);
+    }
+
+    fn clamp_job_selection(&mut self) {
+        let len = self.dashboard.jobs.len();
+        if len == 0 {
+            self.job_selected = 0;
+        } else if self.job_selected >= len {
+            self.job_selected = len - 1;
         }
     }
 
@@ -312,6 +366,7 @@ impl App {
             CommandId::GoTo(screen) => {
                 self.screen = screen;
                 self.clamp_audit_selection();
+                self.clamp_job_selection();
             }
             CommandId::ToggleSidebar => self.toggle_sidebar_overlay(),
             CommandId::OpenHelp => self.open_help(),
@@ -453,10 +508,12 @@ impl App {
             KeyAction::NextScreen => {
                 self.screen = self.screen.next();
                 self.clamp_audit_selection();
+                self.clamp_job_selection();
             }
             KeyAction::PrevScreen => {
                 self.screen = self.screen.prev();
                 self.clamp_audit_selection();
+                self.clamp_job_selection();
             }
             KeyAction::NextFocus => self.cycle_focus(true),
             KeyAction::PrevFocus => self.cycle_focus(false),
@@ -464,16 +521,22 @@ impl App {
             KeyAction::BeginFilter if self.screen == Screen::AuditLog => {
                 self.begin_audit_filter();
             }
-            KeyAction::ListNext if self.list_nav_active() => self.audit_select_next(),
-            KeyAction::ListPrev if self.list_nav_active() => self.audit_select_prev(),
-            KeyAction::ListTop if self.list_nav_active() => self.audit_select_first(),
-            KeyAction::ListBottom if self.list_nav_active() => self.audit_select_last(),
-            KeyAction::PageDown if self.list_nav_active() => self.audit_page(true, 10),
-            KeyAction::PageUp if self.list_nav_active() => self.audit_page(false, 10),
+            KeyAction::ListNext if self.audit_list_nav() => self.audit_select_next(),
+            KeyAction::ListPrev if self.audit_list_nav() => self.audit_select_prev(),
+            KeyAction::ListTop if self.audit_list_nav() => self.audit_select_first(),
+            KeyAction::ListBottom if self.audit_list_nav() => self.audit_select_last(),
+            KeyAction::PageDown if self.audit_list_nav() => self.audit_page(true, 10),
+            KeyAction::PageUp if self.audit_list_nav() => self.audit_page(false, 10),
+            KeyAction::ListNext if self.jobs_list_nav() => self.job_select_next(),
+            KeyAction::ListPrev if self.jobs_list_nav() => self.job_select_prev(),
+            KeyAction::ListTop if self.jobs_list_nav() => self.job_select_first(),
+            KeyAction::ListBottom if self.jobs_list_nav() => self.job_select_last(),
             KeyAction::ChordG if self.key_preset == KeyPreset::Vim => {
                 if self.pending_g {
-                    if self.list_nav_active() {
+                    if self.audit_list_nav() {
                         self.audit_select_first();
+                    } else if self.jobs_list_nav() {
+                        self.job_select_first();
                     }
                     self.pending_g = false;
                 } else {
@@ -498,8 +561,12 @@ impl App {
         }
     }
 
-    fn list_nav_active(&self) -> bool {
+    fn audit_list_nav(&self) -> bool {
         self.screen == Screen::AuditLog && self.focus == FocusPane::Main
+    }
+
+    fn jobs_list_nav(&self) -> bool {
+        self.screen == Screen::Jobs && self.focus == FocusPane::Main
     }
 }
 

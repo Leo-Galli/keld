@@ -1,0 +1,28 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
+┌ Nav ─┐┌ Jobs ────────────────────────────────────────────────────────────────┐
+│ Dash ││ id     module   state     progress duration  results                 │
+│ Scan ││> j-00   http     running        34%    00:12  2 open                 │
+│ Prob ││ j-01   scan     done          100%    00:45  12 open                 │
+│ TLS  ││                                                                      │
+│ HTTP ││                                                                      │
+│ Fuzz ││                                                                      │
+│ DNS  ││                                                                      │
+│ Net  ││                                                                      │
+│ Hash ││                                                                      │
+│ Rpt  ││                                                                      │
+│ Ws   ││                                                                      │
+│*Jobs ││                                                                      │
+│ Aud  ││                                                                      │
+│ Set  ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+└──────┘└──────────────────────────────────────────────────────────────────────┘
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  m sidebar  j/k selec

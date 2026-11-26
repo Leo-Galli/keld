@@ -76,6 +76,7 @@ fn event_loop(
         };
 
         if !event::poll(timeout)? {
+            app.on_tick();
             continue;
         }
 
@@ -191,7 +192,9 @@ fn map_palette_key(
 
 fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Option<KeyAction> {
     let dual = sidebar_visible(app, width);
-    let audit_list = app.screen == Screen::AuditLog && (!dual || app.focus == FocusPane::Main);
+    let main_list = matches!(app.screen, Screen::AuditLog | Screen::Jobs)
+        && (!dual || app.focus == FocusPane::Main);
+    let audit_list = app.screen == Screen::AuditLog && main_list;
     let sidebar_nav = !dual || app.focus == FocusPane::Sidebar;
 
     if modifiers.contains(KeyModifiers::CONTROL) {
@@ -206,7 +209,7 @@ fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) ->
     }
 
     if let Some(action) = preset_list_dir(code, app.key_preset) {
-        if audit_list {
+        if main_list {
             return Some(action);
         }
         if sidebar_nav {
@@ -222,14 +225,14 @@ fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) ->
     match (app.key_preset, code) {
         (KeyPreset::Vim, KeyCode::Char('g')) => Some(KeyAction::ChordG),
         (KeyPreset::Vim, KeyCode::Char('G')) => {
-            if audit_list {
+            if main_list {
                 Some(KeyAction::ListBottom)
             } else {
                 None
             }
         }
-        (KeyPreset::Arrows, KeyCode::Home) if audit_list => Some(KeyAction::ListTop),
-        (KeyPreset::Arrows, KeyCode::End) if audit_list => Some(KeyAction::ListBottom),
+        (KeyPreset::Arrows, KeyCode::Home) if main_list => Some(KeyAction::ListTop),
+        (KeyPreset::Arrows, KeyCode::End) if main_list => Some(KeyAction::ListBottom),
         (KeyPreset::Arrows, KeyCode::PageDown) if audit_list => Some(KeyAction::PageDown),
         (KeyPreset::Arrows, KeyCode::PageUp) if audit_list => Some(KeyAction::PageUp),
         _ => None,

@@ -4,25 +4,25 @@ expression: shot
 ---
 KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
 ┌ Nav ─┐┌ Dashboard ───────────────────────────────────────────────────────────┐
-│*Dash ││Workspace overview placeholder.                                       │
+│*Dash ││ws:default  findings:13  open ports:3                                 │
 │ Scan ││                                                                      │
 │ Prob ││Fi┌ Help  (Vim) ───────────────────────────────────────────┐          │
-│ TLS  ││Ta│-- Global --                                            │.         │
-│ HTTP ││m │ Tab / Shift+Tab    Next / prev focus                   │          │
-│ Fuzz ││  │ /                  Filter (where available)            │          │
-│ DNS  ││  │ :                  Command palette                     │          │
-│ Net  ││  │ ?                  Help overlay                        │          │
+│ TLS  ││cr│-- Global --                                            │          │
+│ HTTP ││hi│ Tab / Shift+Tab    Next / prev focus                   │          │
+│ Fuzz ││me│ /                  Filter (where available)            │          │
+│ DNS  ││lo│ :                  Command palette                     │          │
+│ Net  ││in│ ?                  Help overlay                        │          │
 │ Hash ││  │ m                  Toggle sidebar (narrow)             │          │
-│ Rpt  ││  │ q / Esc            Back / close overlay / quit         │          │
+│ Rpt  ││Re│ q / Esc            Back / close overlay / quit         │          │
 │ Ws   ││  │ Ctrl+C             Quit                                │          │
-│ Aud  ││  │-- Vim preset --                                        │          │
-│ Set  ││  │ j / k              Next / prev list or module          │          │
-│      ││  │ h / l              Reserved (module panes)             │          │
+│ Jobs ││Re│-- Vim preset --                                        │          │
+│ Aud  ││ j│ j / k              Next / prev list or module          │          │
+│ Set  ││ j│ h / l              Reserved (module panes)             │          │
 │      ││  │ g g                Top of list                         │          │
-│      ││  │ G                  Bottom of list                      │          │
-│      ││  │ Ctrl+d / Ctrl+u    Page down / up                      │          │
+│      ││Op│ G                  Bottom of list                      │          │
+│      ││22│ Ctrl+d / Ctrl+u    Page down / up                      │          │
 │      ││  └────────────────────────────────────────────────────────┘          │
 │      ││                                                                      │
 │      ││                                                                      │
 └──────┘└──────────────────────────────────────────────────────────────────────┘
- scope: 10.0.0.0/24  jobs:0  rate:0/s  err:0  |  Tab focus  m sidebar  : cmd  ?
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  m sidebar  : cmd  ?

@@ -2,6 +2,7 @@
 
 pub mod app;
 pub mod commands;
+pub mod dashboard;
 pub mod keys;
 pub mod logo;
 pub mod run;
