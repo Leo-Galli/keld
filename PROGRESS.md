@@ -2,16 +2,17 @@
 
 ## Current task
 
-**KL-003** -- App shell polish: responsive breakpoints, sidebar collapse, terminal-too-small screen, focus ring; snapshots 80/120/200
+**KL-004** -- Config load (`keld.toml` + env + flags), first-launch acknowledgement persistence
 
 Acceptance:
-- Breakpoints: sidebar collapse below 100 cols, single-pane below 70, too-small below 60x16
-- Focused panel uses accent border; unfocused uses default border
-- Snapshots at 80x24, 120x40, 200x60 for shell (and too-small)
-- Manual sanity: layout readable at each size
+- Load order: `keld.toml` < env < flags
+- First-launch authorized-use acknowledgement stored in config; shown once
+- Missing/invalid config falls back to defaults with a clear message
+- Unit tests for merge precedence
 
 ## Done
 
+- **KL-003** -- App shell polish: responsive breakpoints, sidebar collapse, terminal-too-small screen, focus ring; snapshots 80/120/200 -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/5
 - **KL-002** -- Theme system (`theme.rs`): dark/light/high-contrast, truecolor/256/16/`NO_COLOR`, symbols + ASCII fallbacks -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/3
 - **KL-001** -- Workspace skeleton, splash, empty TUI shell, CI -- 2026-11-25 -- https://github.com/Leo-Galli/keld/pull/1
 
@@ -25,6 +26,7 @@ Acceptance:
 
 ## Decisions log
 
+- 2026-11-26: LayoutMode Full (>=100) / Compact (70-99 abbrev strip) / Single (<70); `m` forces full sidebar overlay; Tab toggles focus when dual-pane
 - 2026-11-26: Color depth via env (`COLORTERM`, `TERM`, `WT_SESSION`, Apple Terminal build); high-contrast forces 16 when 256 requested
 - 2026-11-25: Stack pinned -- ratatui 0.30.2, crossterm 0.29, tokio 1.54, clap 4.6, cargo-dist 0.34, winget schema 1.28
 - 2026-11-25: Dual license MIT OR Apache-2.0; PackageIdentifier `LeoGalli.Keld`
@@ -37,7 +39,6 @@ Acceptance:
 
 ### Foundation
 
-- **KL-003** -- App shell polish: responsive breakpoints, sidebar collapse, terminal-too-small screen, focus ring; snapshots 80/120/200
 - **KL-004** -- Config load (`keld.toml` + env + flags), first-launch acknowledgement persistence
 - **KL-005** -- Event bus + Job model in `keld-core`; stub module that emits progress for TUI/CLI wiring
 - **KL-006** -- Scope model + `scope.toml` parse/validate/exclude; refuse out-of-scope; status-bar scope summary
