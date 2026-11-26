@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `keld http`: security headers, cookie flags, CORS (GET + OPTIONS probe), tech fingerprint hints, robots.txt and sitemap.xml; scope-gated; audit logged; `--dry-run` / `--json` / `--rate` / `--concurrency`; TUI HTTP screen with findings table (reqwest + rustls)
 - `keld tls`: certificate chain, expiry, TLS 1.2/1.3 offer checks, negotiated cipher strength, webpki verify status, and HSTS via HTTPS GET; scope-gated; audit logged; `--dry-run` / `--json` / `--rate` / `--concurrency`; TUI TLS screen with findings table
 - `keld probe`: banner and service detection from an embedded signature file (`signatures.keld`); scope-gated; audit logged; `--dry-run` / `--json` / `--rate` / `--concurrency`; TUI Probe screen with form, progress, and results table
 - `keld scan --syn`: optional IPv4 SYN probes when a raw TCP socket is allowed (root or `CAP_NET_RAW` on Unix). Otherwise the job falls back to TCP connect and prints the reason. `keld doctor` reports elevation, Npcap, and whether SYN is usable. The TUI Scan screen toggles the request with `y` and keeps the fallback line on screen.

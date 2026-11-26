@@ -8,6 +8,7 @@ use std::pin::Pin;
 
 use keld_core::{EventSender, JobId, ModuleKind};
 
+pub mod http;
 pub mod ports;
 pub mod probe;
 pub mod scan;
@@ -16,6 +17,10 @@ pub mod stub;
 pub mod syn_path;
 pub mod tls;
 
+pub use http::{
+    parse_http_summary, HttpConfig, HttpError, HttpFinding, HttpModule, HttpSeverity,
+    DEFAULT_HTTP_CONCURRENCY, DEFAULT_HTTP_TIMEOUT_MS,
+};
 pub use ports::{parse_ports, PortParseError, MAX_PORTS, TOP_100};
 pub use probe::{
     parse_probe_summary, ProbeConfig, ProbeError, ProbeHit, ProbeModule, DEFAULT_PROBE_CONCURRENCY,
@@ -46,9 +51,9 @@ pub trait Module: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 }
 
-/// Registered modules available to CLI/TUI wiring (stub + scan + probe + tls).
+/// Registered modules available to CLI/TUI wiring (stub + scan + probe + tls + http).
 pub fn module_count() -> usize {
-    4
+    5
 }
 
 /// Build the stub used for event-bus wiring tests and early UI demos.
@@ -62,8 +67,8 @@ mod tests {
     use keld_core::{EventBus, Job, JobState, ModuleEvent};
 
     #[test]
-    fn registry_lists_stub_scan_probe_and_tls() {
-        assert_eq!(module_count(), 4);
+    fn registry_lists_stub_scan_probe_tls_and_http() {
+        assert_eq!(module_count(), 5);
         assert_eq!(stub_module().kind(), ModuleKind::Stub);
         assert_eq!(
             ScanModule::new(
@@ -88,6 +93,14 @@ mod tests {
             )
             .kind(),
             ModuleKind::Tls
+        );
+        assert_eq!(
+            HttpModule::new(
+                HttpConfig::from_parts("https://127.0.0.1/", 100, 1, true, None).unwrap(),
+                keld_core::Scope::empty(),
+            )
+            .kind(),
+            ModuleKind::Http
         );
     }
 

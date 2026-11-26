@@ -141,7 +141,20 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         };
     }
 
-    if app.scan.editing && app.screen == Screen::Scan {
+    let module_editing = matches!(
+        (
+            app.screen,
+            app.scan.editing,
+            app.probe.editing,
+            app.tls.editing,
+            app.http.editing
+        ),
+        (Screen::Scan, true, _, _, _)
+            | (Screen::Probe, _, true, _, _)
+            | (Screen::Tls, _, _, true, _)
+            | (Screen::Http, _, _, _, true)
+    );
+    if module_editing {
         return match code {
             KeyCode::Esc => Some(KeyAction::CloseOverlay),
             KeyCode::Enter => Some(KeyAction::EndFilter),
@@ -159,10 +172,20 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         KeyCode::Char('?') => return Some(KeyAction::OpenHelp),
         KeyCode::Char('m') => return Some(KeyAction::ToggleSidebar),
         KeyCode::Char('q') | KeyCode::Esc => return Some(KeyAction::Quit),
-        KeyCode::Char('s') if matches!(app.screen, Screen::Scan | Screen::Probe | Screen::Tls) => {
+        KeyCode::Char('s')
+            if matches!(
+                app.screen,
+                Screen::Scan | Screen::Probe | Screen::Tls | Screen::Http
+            ) =>
+        {
             return Some(KeyAction::ScanStart);
         }
-        KeyCode::Char('p') if matches!(app.screen, Screen::Scan | Screen::Probe | Screen::Tls) => {
+        KeyCode::Char('p')
+            if matches!(
+                app.screen,
+                Screen::Scan | Screen::Probe | Screen::Tls | Screen::Http
+            ) =>
+        {
             return Some(KeyAction::ScanToggleDryRun);
         }
         KeyCode::Char('y') if app.screen == Screen::Scan => {
@@ -215,11 +238,12 @@ fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) ->
     let dual = sidebar_visible(app, width);
     let main_list = matches!(
         app.screen,
-        Screen::AuditLog | Screen::Jobs | Screen::Scan | Screen::Probe | Screen::Tls
+        Screen::AuditLog | Screen::Jobs | Screen::Scan | Screen::Probe | Screen::Tls | Screen::Http
     ) && (!dual || app.focus == FocusPane::Main)
         && !(app.screen == Screen::Scan && app.scan.editing)
         && !(app.screen == Screen::Probe && app.probe.editing)
-        && !(app.screen == Screen::Tls && app.tls.editing);
+        && !(app.screen == Screen::Tls && app.tls.editing)
+        && !(app.screen == Screen::Http && app.http.editing);
     let audit_list = app.screen == Screen::AuditLog && main_list;
     let sidebar_nav = !dual || app.focus == FocusPane::Sidebar;
 

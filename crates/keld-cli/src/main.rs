@@ -2,6 +2,7 @@
 
 mod color;
 mod doctor;
+mod http_cmd;
 mod output;
 mod probe_cmd;
 mod scan_cmd;
@@ -18,7 +19,9 @@ use keld_core::{
     default_audit_path, load, load_scope_optional, AuditLog, ConfigOverrides, ThemeName,
     AUTHORIZED_USE, VERSION,
 };
-use keld_modules::{DEFAULT_PROBE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, DEFAULT_TLS_TIMEOUT_MS};
+use keld_modules::{
+    DEFAULT_HTTP_TIMEOUT_MS, DEFAULT_PROBE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, DEFAULT_TLS_TIMEOUT_MS,
+};
 use keld_tui::{run, version_banner, ThemeId, TuiOptions};
 
 use crate::color::ColorMode;
@@ -124,6 +127,14 @@ enum Commands {
         ports: String,
         /// Connect / handshake / HTTP timeout in milliseconds
         #[arg(long, default_value_t = DEFAULT_TLS_TIMEOUT_MS)]
+        timeout: u64,
+    },
+    /// HTTP security headers, cookies, CORS, fingerprint, robots/sitemap
+    Http {
+        /// URL or host in scope (scheme defaults to https)
+        target: String,
+        /// Request timeout in milliseconds
+        #[arg(long, default_value_t = DEFAULT_HTTP_TIMEOUT_MS)]
         timeout: u64,
     },
 }
@@ -258,6 +269,24 @@ fn main() -> Result<ExitCode> {
             .map_err(|e| anyhow::anyhow!(e))?;
             Ok(ExitCode::from(code))
         }
+        Some(Commands::Http { target, timeout }) => {
+            let mut audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
+            let code = http_cmd::run(
+                http_cmd::HttpArgs {
+                    target,
+                    timeout_ms: timeout,
+                    concurrency: cli.concurrency.unwrap_or(0),
+                    dry_run: cli.dry_run,
+                    rate: cli.rate,
+                    json: cli.json,
+                    color,
+                },
+                &scope,
+                &mut audit,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            Ok(ExitCode::from(code))
+        }
         None => {
             let audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
 
@@ -304,8 +333,30 @@ mod tests {
         assert!(help.contains("scan") || help.contains("Scan"));
         assert!(help.contains("probe") || help.contains("Probe"));
         assert!(help.contains("tls") || help.contains("Tls") || help.contains("TLS"));
+        assert!(help.contains("http") || help.contains("Http") || help.contains("HTTP"));
         assert!(help.contains("--json"));
         assert!(help.contains("--dry-run"));
+    }
+
+    #[test]
+    fn parses_http_target() {
+        let cli = Cli::try_parse_from([
+            "keld",
+            "--dry-run",
+            "http",
+            "https://127.0.0.1/",
+            "--timeout",
+            "2500",
+        ])
+        .unwrap();
+        assert!(cli.dry_run);
+        match cli.command {
+            Some(Commands::Http { target, timeout }) => {
+                assert_eq!(target, "https://127.0.0.1/");
+                assert_eq!(timeout, 2500);
+            }
+            other => panic!("expected Http, got {other:?}"),
+        }
     }
 
     #[test]

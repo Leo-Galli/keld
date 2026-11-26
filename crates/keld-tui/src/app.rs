@@ -6,6 +6,7 @@ use keld_core::{AuditEntry, Scope, ThemeName};
 
 use crate::commands::{self, CommandId};
 use crate::dashboard::DashboardState;
+use crate::http_view::{HttpRunState, HttpView};
 use crate::keys::KeyPreset;
 use crate::probe_view::{ProbeRunState, ProbeView};
 use crate::scan_view::{ScanRunState, ScanView};
@@ -134,6 +135,8 @@ pub struct App {
     pub probe: ProbeView,
     /// TLS module form + findings.
     pub tls: TlsView,
+    /// HTTP module form + findings.
+    pub http: HttpView,
     /// Tick accumulator so job elapsed advances ~1s even at 30 FPS.
     tick_accum: u32,
 }
@@ -180,6 +183,7 @@ impl App {
             scan: ScanView::default(),
             probe: ProbeView::default(),
             tls: TlsView::default(),
+            http: HttpView::default(),
             tick_accum: 0,
         }
     }
@@ -192,6 +196,7 @@ impl App {
         self.scan.poll();
         self.probe.poll();
         self.tls.poll();
+        self.http.poll();
         // ~30 FPS tick; advance job clocks once per ~30 ticks (~1s).
         self.tick_accum = self.tick_accum.saturating_add(1);
         if self.tick_accum < 30 {
@@ -234,6 +239,17 @@ impl App {
         }
     }
 
+    pub fn start_http(&mut self) {
+        match self.http.start(&self.scope) {
+            Ok(()) => {}
+            Err(e) => {
+                self.http.error = Some(e.clone());
+                self.http.message = e;
+                self.http.run_state = HttpRunState::Failed;
+            }
+        }
+    }
+
     pub fn toggle_scan_dry_run(&mut self) {
         self.scan.dry_run = !self.scan.dry_run;
     }
@@ -244,6 +260,10 @@ impl App {
 
     pub fn toggle_tls_dry_run(&mut self) {
         self.tls.dry_run = !self.tls.dry_run;
+    }
+
+    pub fn toggle_http_dry_run(&mut self) {
+        self.http.dry_run = !self.http.dry_run;
     }
 
     pub fn toggle_scan_syn(&mut self) {
@@ -272,6 +292,14 @@ impl App {
 
     pub fn tls_prev_field(&mut self) {
         self.tls.field = self.tls.field.prev();
+    }
+
+    pub fn http_next_field(&mut self) {
+        self.http.field = self.http.field.next();
+    }
+
+    pub fn http_prev_field(&mut self) {
+        self.http.field = self.http.field.prev();
     }
 
     pub fn job_select_next(&mut self) {
@@ -628,6 +656,19 @@ impl App {
             return;
         }
 
+        if self.http.editing && self.screen == Screen::Http {
+            match key {
+                KeyAction::Quit | KeyAction::CloseOverlay => self.http.editing = false,
+                KeyAction::Activate | KeyAction::EndFilter => self.http.editing = false,
+                KeyAction::FilterBackspace => self.http.field_backspace(),
+                KeyAction::FilterChar(c) => self.http.field_push(c),
+                KeyAction::NextFocus => self.http_next_field(),
+                KeyAction::PrevFocus => self.http_prev_field(),
+                _ => {}
+            }
+            return;
+        }
+
         if !matches!(key, KeyAction::ChordG) {
             self.pending_g = false;
         }
@@ -654,6 +695,8 @@ impl App {
                     self.probe_next_field();
                 } else if self.screen == Screen::Tls && self.focus == FocusPane::Main {
                     self.tls_next_field();
+                } else if self.screen == Screen::Http && self.focus == FocusPane::Main {
+                    self.http_next_field();
                 } else {
                     self.cycle_focus(true);
                 }
@@ -665,6 +708,8 @@ impl App {
                     self.probe_prev_field();
                 } else if self.screen == Screen::Tls && self.focus == FocusPane::Main {
                     self.tls_prev_field();
+                } else if self.screen == Screen::Http && self.focus == FocusPane::Main {
+                    self.http_prev_field();
                 } else {
                     self.cycle_focus(false);
                 }
@@ -676,6 +721,7 @@ impl App {
             KeyAction::ScanStart if self.screen == Screen::Scan => self.start_scan(),
             KeyAction::ScanStart if self.screen == Screen::Probe => self.start_probe(),
             KeyAction::ScanStart if self.screen == Screen::Tls => self.start_tls(),
+            KeyAction::ScanStart if self.screen == Screen::Http => self.start_http(),
             KeyAction::ScanToggleDryRun if self.screen == Screen::Scan => {
                 self.toggle_scan_dry_run();
             }
@@ -684,6 +730,9 @@ impl App {
             }
             KeyAction::ScanToggleDryRun if self.screen == Screen::Tls => {
                 self.toggle_tls_dry_run();
+            }
+            KeyAction::ScanToggleDryRun if self.screen == Screen::Http => {
+                self.toggle_http_dry_run();
             }
             KeyAction::ScanToggleSyn if self.screen == Screen::Scan => {
                 self.toggle_scan_syn();
@@ -698,6 +747,9 @@ impl App {
             }
             KeyAction::Activate if self.screen == Screen::Tls && self.focus == FocusPane::Main => {
                 self.tls.editing = true;
+            }
+            KeyAction::Activate if self.screen == Screen::Http && self.focus == FocusPane::Main => {
+                self.http.editing = true;
             }
             KeyAction::ListNext if self.audit_list_nav() => self.audit_select_next(),
             KeyAction::ListPrev if self.audit_list_nav() => self.audit_select_prev(),
@@ -715,6 +767,8 @@ impl App {
             KeyAction::ListPrev if self.probe_list_nav() => self.probe.select_prev(),
             KeyAction::ListNext if self.tls_list_nav() => self.tls.select_next(),
             KeyAction::ListPrev if self.tls_list_nav() => self.tls.select_prev(),
+            KeyAction::ListNext if self.http_list_nav() => self.http.select_next(),
+            KeyAction::ListPrev if self.http_list_nav() => self.http.select_prev(),
             KeyAction::ChordG if self.key_preset == KeyPreset::Vim => {
                 if self.pending_g {
                     if self.audit_list_nav() {
@@ -766,6 +820,10 @@ impl App {
 
     fn tls_list_nav(&self) -> bool {
         self.screen == Screen::Tls && self.focus == FocusPane::Main && !self.tls.editing
+    }
+
+    fn http_list_nav(&self) -> bool {
+        self.screen == Screen::Http && self.focus == FocusPane::Main && !self.http.editing
     }
 }
 
