@@ -2,10 +2,11 @@
 
 ## Current task
 
-**KL-012** -- `scan`: optional SYN path (Npcap/root) with clear fallback messaging in doctor/TUI
+**KL-013** -- `probe`: banner/service detection + embedded signature file; CLI + TUI + tests
 
 ## Done
 
+- **KL-012** -- `scan`: optional SYN path (Npcap/root) with clear fallback messaging in doctor/TUI -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/23
 - **KL-011** -- `scan`: TCP connect scanner (ranges, top-ports, timeout, concurrency, dry-run); CLI + TUI + tests -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/21
 - **KL-010** -- Dashboard screen with placeholder charts/sparklines; Jobs list screen -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/19
 - **KL-009** -- Command palette + help overlay + keybinding presets (vim/arrows) -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/17
@@ -28,6 +29,7 @@
 
 ## Decisions log
 
+- 2026-11-26: SYN is opt-in (`--syn`, TUI `y`). It runs only when a raw IPv4 TCP socket opens (Unix root or CAP_NET_RAW). Windows blocks raw TCP; Npcap is reported and is not used to inject frames. Otherwise the job uses TCP connect and the reason is shown by doctor, the CLI, and the Scan screen. SYN probes are serial on one socket and IPv4-only
 - 2026-11-26: TCP connect scan uses tokio `TcpStream` + semaphore concurrency; ports via `top`/`top1000`/ranges; dry-run emits planned probes only; TUI Scan runs worker thread + mpsc poll on tick (event loop stays sync); open ports only as Result events
 - 2026-11-26: Dashboard/Jobs share `DashboardState` on `App` (placeholder findings/sparkline/ports); Jobs is its own sidebar screen; `on_tick` advances running jobs ~1s regardless of current screen until real engine wiring
 - 2026-11-26: Command palette uses in-crate fuzzy substring scoring (no extra crate); palette selection always Up/Down so j/k remain typeable; Esc closes overlays without quitting; Vim vs Arrows are mutually exclusive for list/sidebar nav; preset switch via palette until KL-023 Settings
