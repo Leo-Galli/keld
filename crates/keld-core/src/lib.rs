@@ -4,11 +4,15 @@
 //! `keld-modules`; this crate stays free of network I/O for now.
 
 pub mod config;
+pub mod event;
+pub mod job;
 
 pub use config::{
     load, merge, persist_authorized_ack, project_config_path, save, user_config_path, Config,
     ConfigError, ConfigFile, ConfigOverrides, ConfigWarning, LoadedConfig, ThemeName,
 };
+pub use event::{EventBus, EventSender, LogLevel, ModuleEvent, DEFAULT_BUS_CAPACITY};
+pub use job::{Job, JobError, JobId, JobState, ModuleKind};
 
 /// Crate version string (workspace package version).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
