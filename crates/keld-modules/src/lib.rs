@@ -14,6 +14,7 @@ pub mod scan;
 pub mod signatures;
 pub mod stub;
 pub mod syn_path;
+pub mod tls;
 
 pub use ports::{parse_ports, PortParseError, MAX_PORTS, TOP_100};
 pub use probe::{
@@ -27,6 +28,10 @@ pub use scan::{
 pub use signatures::{SignatureDb, SignatureError, EMBEDDED_SIGNATURES};
 pub use stub::StubModule;
 pub use syn_path::{decide, ScanTechnique, SynAvailability, TechniqueDecision};
+pub use tls::{
+    parse_tls_summary, TlsConfig, TlsError, TlsFinding, TlsModule, TlsSeverity,
+    DEFAULT_TLS_CONCURRENCY, DEFAULT_TLS_TIMEOUT_MS,
+};
 
 /// Shared async contract for every recon/audit module.
 pub trait Module: Send + Sync {
@@ -41,9 +46,9 @@ pub trait Module: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 }
 
-/// Registered modules available to CLI/TUI wiring (stub + scan + probe).
+/// Registered modules available to CLI/TUI wiring (stub + scan + probe + tls).
 pub fn module_count() -> usize {
-    3
+    4
 }
 
 /// Build the stub used for event-bus wiring tests and early UI demos.
@@ -57,8 +62,8 @@ mod tests {
     use keld_core::{EventBus, Job, JobState, ModuleEvent};
 
     #[test]
-    fn registry_lists_stub_scan_and_probe() {
-        assert_eq!(module_count(), 3);
+    fn registry_lists_stub_scan_probe_and_tls() {
+        assert_eq!(module_count(), 4);
         assert_eq!(stub_module().kind(), ModuleKind::Stub);
         assert_eq!(
             ScanModule::new(
@@ -75,6 +80,14 @@ mod tests {
             )
             .kind(),
             ModuleKind::Probe
+        );
+        assert_eq!(
+            TlsModule::new(
+                TlsConfig::from_parts("127.0.0.1", "443", 100, 1, true, None).unwrap(),
+                keld_core::Scope::empty(),
+            )
+            .kind(),
+            ModuleKind::Tls
         );
     }
 

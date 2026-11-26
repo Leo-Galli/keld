@@ -1,0 +1,28 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
+┌ Nav ─┐┌ TLS ─────────────────────────────────────────────────────────────────┐
+│ Dash ││>Target [10.0.0.5]   Ports [443]                                      │
+│ Scan ││ Concurrency [8]   Timeout [5000]  [ ] dry-run  state:idle            │
+│ Prob ││Enter edit  Tab fields  s start  p dry-run                            │
+│*TLS  ││Progress ######################## 100%  auditing                      │
+│ HTTP ││                                                                      │
+│ Fuzz ││ Sev       Port Kind       Detail                                     │
+│ DNS  ││> info       443 chain      depth=2 leaf=CN=example                   │
+│ Net  ││ high       443 expiry     expires_in=12d                             │
+│ Hash ││ medium     443 hsts       missing                                    │
+│ Rpt  ││                                                                      │
+│ Ws   ││Detail: 10.0.0.5:443 [info] chain -- depth=2 leaf=CN=example          │
+│ Jobs ││                                                                      │
+│ Aud  ││                                                                      │
+│ Set  ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+└──────┘└──────────────────────────────────────────────────────────────────────┘
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  m sidebar  s start

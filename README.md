@@ -46,6 +46,8 @@ keld scan 10.0.0.5 --ports 1-1024 --timeout 500 --json
 keld scan 10.0.0.5 --ports 22,80 --syn
 keld probe 127.0.0.1 --ports 22,80 --dry-run
 keld probe 10.0.0.5 --ports top --json
+keld tls 127.0.0.1 --ports 443 --dry-run
+keld tls example.com --ports 443 --json
 ```
 
 Use only on systems you own or are explicitly authorized to test. Active modules require a scope (`scope.toml` or explicit targets). Out-of-scope targets are refused. Every action is written to an audit log.

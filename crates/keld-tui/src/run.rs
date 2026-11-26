@@ -159,10 +159,10 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         KeyCode::Char('?') => return Some(KeyAction::OpenHelp),
         KeyCode::Char('m') => return Some(KeyAction::ToggleSidebar),
         KeyCode::Char('q') | KeyCode::Esc => return Some(KeyAction::Quit),
-        KeyCode::Char('s') if app.screen == Screen::Scan => {
+        KeyCode::Char('s') if matches!(app.screen, Screen::Scan | Screen::Probe | Screen::Tls) => {
             return Some(KeyAction::ScanStart);
         }
-        KeyCode::Char('p') if app.screen == Screen::Scan => {
+        KeyCode::Char('p') if matches!(app.screen, Screen::Scan | Screen::Probe | Screen::Tls) => {
             return Some(KeyAction::ScanToggleDryRun);
         }
         KeyCode::Char('y') if app.screen == Screen::Scan => {
@@ -213,9 +213,13 @@ fn map_palette_key(
 
 fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Option<KeyAction> {
     let dual = sidebar_visible(app, width);
-    let main_list = matches!(app.screen, Screen::AuditLog | Screen::Jobs | Screen::Scan)
-        && (!dual || app.focus == FocusPane::Main)
-        && !(app.screen == Screen::Scan && app.scan.editing);
+    let main_list = matches!(
+        app.screen,
+        Screen::AuditLog | Screen::Jobs | Screen::Scan | Screen::Probe | Screen::Tls
+    ) && (!dual || app.focus == FocusPane::Main)
+        && !(app.screen == Screen::Scan && app.scan.editing)
+        && !(app.screen == Screen::Probe && app.probe.editing)
+        && !(app.screen == Screen::Tls && app.tls.editing);
     let audit_list = app.screen == Screen::AuditLog && main_list;
     let sidebar_nav = !dual || app.focus == FocusPane::Sidebar;
 

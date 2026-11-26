@@ -6,6 +6,7 @@ mod output;
 mod probe_cmd;
 mod scan_cmd;
 mod signal;
+mod tls_cmd;
 
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
@@ -17,7 +18,7 @@ use keld_core::{
     default_audit_path, load, load_scope_optional, AuditLog, ConfigOverrides, ThemeName,
     AUTHORIZED_USE, VERSION,
 };
-use keld_modules::{DEFAULT_PROBE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS};
+use keld_modules::{DEFAULT_PROBE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, DEFAULT_TLS_TIMEOUT_MS};
 use keld_tui::{run, version_banner, ThemeId, TuiOptions};
 
 use crate::color::ColorMode;
@@ -112,6 +113,17 @@ enum Commands {
         ports: String,
         /// Connect and read timeout in milliseconds
         #[arg(long, default_value_t = DEFAULT_PROBE_TIMEOUT_MS)]
+        timeout: u64,
+    },
+    /// TLS certificate chain, expiry, protocols, ciphers, HSTS
+    Tls {
+        /// Host or IP in scope
+        target: String,
+        /// Ports: `443`, `443,8443` (default: 443)
+        #[arg(short, long, default_value = "443")]
+        ports: String,
+        /// Connect / handshake / HTTP timeout in milliseconds
+        #[arg(long, default_value_t = DEFAULT_TLS_TIMEOUT_MS)]
         timeout: u64,
     },
 }
@@ -223,6 +235,29 @@ fn main() -> Result<ExitCode> {
             .map_err(|e| anyhow::anyhow!(e))?;
             Ok(ExitCode::from(code))
         }
+        Some(Commands::Tls {
+            target,
+            ports,
+            timeout,
+        }) => {
+            let mut audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
+            let code = tls_cmd::run(
+                tls_cmd::TlsArgs {
+                    target,
+                    ports,
+                    timeout_ms: timeout,
+                    concurrency: cli.concurrency.unwrap_or(0),
+                    dry_run: cli.dry_run,
+                    rate: cli.rate,
+                    json: cli.json,
+                    color,
+                },
+                &scope,
+                &mut audit,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            Ok(ExitCode::from(code))
+        }
         None => {
             let audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
 
@@ -268,8 +303,37 @@ mod tests {
         assert!(help.contains("doctor") || help.contains("Doctor"));
         assert!(help.contains("scan") || help.contains("Scan"));
         assert!(help.contains("probe") || help.contains("Probe"));
+        assert!(help.contains("tls") || help.contains("Tls") || help.contains("TLS"));
         assert!(help.contains("--json"));
         assert!(help.contains("--dry-run"));
+    }
+
+    #[test]
+    fn parses_tls_with_ports() {
+        let cli = Cli::try_parse_from([
+            "keld",
+            "--dry-run",
+            "tls",
+            "127.0.0.1",
+            "--ports",
+            "443,8443",
+            "--timeout",
+            "3000",
+        ])
+        .unwrap();
+        assert!(cli.dry_run);
+        match cli.command {
+            Some(Commands::Tls {
+                target,
+                ports,
+                timeout,
+            }) => {
+                assert_eq!(target, "127.0.0.1");
+                assert_eq!(ports, "443,8443");
+                assert_eq!(timeout, 3000);
+            }
+            other => panic!("expected Tls, got {other:?}"),
+        }
     }
 
     #[test]

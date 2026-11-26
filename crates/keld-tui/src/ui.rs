@@ -12,6 +12,7 @@ use crate::logo::{self, WORDMARK};
 use crate::probe_view::ProbeField;
 use crate::scan_view::ScanField;
 use crate::screen::Screen;
+use crate::tls_view::TlsField;
 
 const MIN_WIDTH: u16 = 60;
 const MIN_HEIGHT: u16 = 16;
@@ -306,6 +307,7 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, fo
         Screen::Jobs => draw_jobs(frame, area, app, focused),
         Screen::Scan => draw_scan(frame, area, app, focused),
         Screen::Probe => draw_probe(frame, area, app, focused),
+        Screen::Tls => draw_tls(frame, area, app, focused),
         _ => {
             let title = format!(" {} ", app.screen.title());
             frame.render_widget(
@@ -469,6 +471,142 @@ fn draw_scan(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
         Paragraph::new(lines)
             .style(app.theme.text_style())
             .block(panel_block(app, " Scan ", focused)),
+        area,
+    );
+}
+
+fn draw_tls(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
+    let tls = &app.tls;
+    let dry = if tls.dry_run { "x" } else { " " };
+    let state = match tls.run_state {
+        crate::tls_view::TlsRunState::Idle => "idle",
+        crate::tls_view::TlsRunState::Running => "running",
+        crate::tls_view::TlsRunState::Done => "done",
+        crate::tls_view::TlsRunState::Failed => "failed",
+    };
+    let bar_w = (area.width.saturating_sub(28) as usize).clamp(8, 24);
+    let frac = tls.progress_fraction().unwrap_or(0.0);
+    let filled = ((frac * bar_w as f64).round() as usize).min(bar_w);
+    let bar = if app.ascii {
+        format!("{}{}", "#".repeat(filled), "-".repeat(bar_w - filled))
+    } else {
+        format!("{}{}", "█".repeat(filled), "░".repeat(bar_w - filled))
+    };
+
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(Span::styled(
+            format!(
+                "{}  {}",
+                field_label(
+                    tls.field == TlsField::Target,
+                    "Target",
+                    &tls.target,
+                    tls.editing
+                ),
+                field_label(
+                    tls.field == TlsField::Ports,
+                    "Ports",
+                    &tls.ports,
+                    tls.editing
+                )
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "{}  {}  [{}] dry-run  state:{}",
+                field_label(
+                    tls.field == TlsField::Concurrency,
+                    "Concurrency",
+                    &tls.concurrency,
+                    tls.editing
+                ),
+                field_label(
+                    tls.field == TlsField::Timeout,
+                    "Timeout",
+                    &tls.timeout_ms,
+                    tls.editing
+                ),
+                dry,
+                state
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            "Enter edit  Tab fields  s start  p dry-run",
+            app.theme.muted_style(),
+        )),
+        Line::from(Span::styled(
+            format!("Progress {} {}  {}", bar, tls.progress_label(), tls.message),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!(" {:<8} {:>5} {:<10} {}", "Sev", "Port", "Kind", "Detail"),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    if tls.results.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "(no findings yet)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let header_rows = 6u16;
+        let inner_h = area.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(header_rows + 2) as usize;
+        let selected = tls.selected.min(tls.results.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, hit) in tls
+            .results
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(visible.max(1))
+        {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let sev = if hit.planned {
+                "plan"
+            } else {
+                hit.severity.as_str()
+            };
+            let kind = hit.kind.as_str();
+            let detail: String = hit.detail.chars().take(40).collect();
+            let row = format!("{marker}{sev:<8} {:>5} {kind:<10} {detail}", hit.port);
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(row, style)));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("Detail: {}", tls.detail_line()),
+        app.theme.muted_style(),
+    )));
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(app.theme.text_style())
+            .block(panel_block(app, " TLS ", focused)),
         area,
     );
 }
@@ -919,6 +1057,8 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Screen::Scan => format!("  s start  p dry-run  y syn  {list_hint} select"),
         Screen::Probe if app.probe.editing => "  Enter done  Tab fields".to_string(),
         Screen::Probe => format!("  s start  p dry-run  {list_hint} select"),
+        Screen::Tls if app.tls.editing => "  Enter done  Tab fields".to_string(),
+        Screen::Tls => format!("  s start  p dry-run  {list_hint} select"),
         _ => String::new(),
     };
     let text = format!(
@@ -1270,6 +1410,50 @@ mod tests {
         assert!(shot.contains("ssh"));
         assert!(shot.contains("http"));
         assert_snapshot!("probe_80x24", shot);
+    }
+
+    #[test]
+    fn tls_snapshot_80x24() {
+        use keld_modules::{TlsFinding, TlsSeverity};
+        let mut app = shell_app();
+        app.screen = Screen::Tls;
+        app.focus = FocusPane::Main;
+        app.tls.target = "10.0.0.5".into();
+        app.tls.ports = "443".into();
+        app.tls.results = vec![
+            TlsFinding {
+                host: "10.0.0.5".into(),
+                port: 443,
+                severity: TlsSeverity::Info,
+                kind: "chain".into(),
+                detail: "depth=2 leaf=CN=example".into(),
+                planned: false,
+            },
+            TlsFinding {
+                host: "10.0.0.5".into(),
+                port: 443,
+                severity: TlsSeverity::High,
+                kind: "expiry".into(),
+                detail: "expires_in=12d".into(),
+                planned: false,
+            },
+            TlsFinding {
+                host: "10.0.0.5".into(),
+                port: 443,
+                severity: TlsSeverity::Medium,
+                kind: "hsts".into(),
+                detail: "missing".into(),
+                planned: false,
+            },
+        ];
+        app.tls.done = 1;
+        app.tls.total = 1;
+        app.tls.message = "auditing".into();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("TLS"));
+        assert!(shot.contains("10.0.0.5"));
+        assert!(shot.contains("expiry") || shot.contains("hsts"));
+        assert_snapshot!("tls_80x24", shot);
     }
 
     #[test]
