@@ -6,7 +6,10 @@ use std::process::ExitCode;
 
 use anyhow::Result;
 use clap::Parser;
-use keld_core::{load, load_scope_optional, ConfigOverrides, ThemeName, AUTHORIZED_USE, VERSION};
+use keld_core::{
+    default_audit_path, load, load_scope_optional, AuditLog, ConfigOverrides, ThemeName,
+    AUTHORIZED_USE, VERSION,
+};
 use keld_tui::{run, version_banner, ThemeId, TuiOptions};
 
 #[derive(Debug, Parser)]
@@ -28,6 +31,10 @@ struct Cli {
     /// Path to `scope.toml` (default: ./scope.toml when present)
     #[arg(long = "scope", value_name = "PATH")]
     scope: Option<PathBuf>,
+
+    /// Path to audit JSONL (default: ./audit.jsonl or user data dir)
+    #[arg(long = "audit-log", value_name = "PATH")]
+    audit_log: Option<PathBuf>,
 
     /// Skip the splash screen
     #[arg(long)]
@@ -83,6 +90,9 @@ fn main() -> Result<ExitCode> {
         eprintln!("warning: no scope loaded; active modules will refuse targets until scope.toml or --scope is set");
     }
 
+    let audit_path = cli.audit_log.clone().unwrap_or_else(default_audit_path);
+    let audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
+
     let opts = TuiOptions {
         show_splash: loaded.config.splash,
         ascii: loaded.config.ascii,
@@ -91,6 +101,8 @@ fn main() -> Result<ExitCode> {
         needs_ack: !loaded.config.authorized_ack,
         config_path: loaded.persist_path,
         scope_summary: scope.summary(),
+        audit_entries: audit.entries().to_vec(),
+        audit_path,
     };
 
     run(opts).map_err(|e| anyhow::anyhow!(e))?;

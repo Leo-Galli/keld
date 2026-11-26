@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Audit log: append-only JSONL API (`AuditLog` / `AuditEntry`); `--audit-log` flag; read-only Audit log TUI screen with filter (`/`) and scroll
 - Scope model: parse/validate `scope.toml` (includes, excludes, notes); `Scope::check` refuses out-of-scope/excluded targets; `--scope` flag; TUI status bar shows active scope summary
 - Event bus (`EventBus` / `ModuleEvent`) and `Job` model in `keld-core`; stub module in `keld-modules` emits progress for TUI/CLI wiring
 - Config load: `keld.toml` < env (`KELD_*`, `NO_COLOR`) < flags; `--config` / `--theme`; first-launch authorized-use acknowledgement persisted to config

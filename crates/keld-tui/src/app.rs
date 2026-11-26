@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use keld_core::ThemeName;
+use keld_core::{AuditEntry, ThemeName};
 
 use crate::screen::Screen;
 use crate::symbols::Symbols;
@@ -21,6 +21,10 @@ pub struct TuiOptions {
     pub config_path: PathBuf,
     /// Active scope summary for header and status bar.
     pub scope_summary: String,
+    /// Loaded audit entries (read-only viewer; append happens via core API).
+    pub audit_entries: Vec<AuditEntry>,
+    /// Path shown in the Audit log screen title.
+    pub audit_path: PathBuf,
 }
 
 impl Default for TuiOptions {
@@ -33,6 +37,8 @@ impl Default for TuiOptions {
             needs_ack: true,
             config_path: PathBuf::from("keld.toml"),
             scope_summary: "(no scope)".into(),
+            audit_entries: Vec::new(),
+            audit_path: PathBuf::from("audit.jsonl"),
         }
     }
 }
@@ -82,6 +88,14 @@ pub struct App {
     pub config_path: PathBuf,
     /// Last persistence error shown on the ack screen (if any).
     pub ack_error: Option<String>,
+    pub audit_entries: Vec<AuditEntry>,
+    pub audit_path: PathBuf,
+    /// Substring filter for the Audit log screen (`/` to edit).
+    pub audit_filter: String,
+    /// Whether `/` filter input is active on the Audit log screen.
+    pub audit_filtering: bool,
+    /// Selected row in the filtered audit list.
+    pub audit_selected: usize,
 }
 
 impl App {
@@ -110,7 +124,69 @@ impl App {
             needs_ack: opts.needs_ack,
             config_path: opts.config_path,
             ack_error: None,
+            audit_entries: opts.audit_entries,
+            audit_path: opts.audit_path,
+            audit_filter: String::new(),
+            audit_filtering: false,
+            audit_selected: 0,
         }
+    }
+
+    /// Filtered audit entries (oldest first), for the viewer.
+    pub fn audit_filtered(&self) -> Vec<&AuditEntry> {
+        self.audit_entries
+            .iter()
+            .filter(|e| e.matches_filter(&self.audit_filter))
+            .collect()
+    }
+
+    fn clamp_audit_selection(&mut self) {
+        let len = self.audit_filtered().len();
+        if len == 0 {
+            self.audit_selected = 0;
+        } else if self.audit_selected >= len {
+            self.audit_selected = len - 1;
+        }
+    }
+
+    pub fn audit_select_next(&mut self) {
+        let len = self.audit_filtered().len();
+        if len == 0 {
+            self.audit_selected = 0;
+            return;
+        }
+        self.audit_selected = (self.audit_selected + 1).min(len - 1);
+    }
+
+    pub fn audit_select_prev(&mut self) {
+        self.audit_selected = self.audit_selected.saturating_sub(1);
+    }
+
+    pub fn begin_audit_filter(&mut self) {
+        self.audit_filtering = true;
+        self.focus = FocusPane::Main;
+    }
+
+    pub fn end_audit_filter(&mut self) {
+        self.audit_filtering = false;
+    }
+
+    pub fn clear_audit_filter(&mut self) {
+        self.audit_filter.clear();
+        self.audit_filtering = false;
+        self.clamp_audit_selection();
+    }
+
+    pub fn audit_filter_push(&mut self, c: char) {
+        if !c.is_control() {
+            self.audit_filter.push(c);
+            self.clamp_audit_selection();
+        }
+    }
+
+    pub fn audit_filter_backspace(&mut self) {
+        self.audit_filter.pop();
+        self.clamp_audit_selection();
     }
 
     /// Switch theme at runtime (Settings screen wires this in KL-023).
@@ -192,15 +268,54 @@ impl App {
                 }
                 _ => {}
             },
-            Phase::Shell => match key {
-                KeyAction::Quit => self.quit(),
-                KeyAction::NextScreen => self.screen = self.screen.next(),
-                KeyAction::PrevScreen => self.screen = self.screen.prev(),
-                KeyAction::NextFocus => self.cycle_focus(true),
-                KeyAction::PrevFocus => self.cycle_focus(false),
-                KeyAction::ToggleSidebar => self.toggle_sidebar_overlay(),
-                KeyAction::SkipSplash | KeyAction::ToggleAck | KeyAction::ConfirmAck => {}
-            },
+            Phase::Shell => {
+                if self.audit_filtering {
+                    match key {
+                        KeyAction::Quit => self.clear_audit_filter(),
+                        KeyAction::ConfirmAck | KeyAction::EndFilter => self.end_audit_filter(),
+                        KeyAction::FilterBackspace => self.audit_filter_backspace(),
+                        KeyAction::FilterChar(c) => self.audit_filter_push(c),
+                        _ => {}
+                    }
+                    return;
+                }
+                match key {
+                    KeyAction::Quit => self.quit(),
+                    KeyAction::NextScreen => {
+                        self.screen = self.screen.next();
+                        self.clamp_audit_selection();
+                    }
+                    KeyAction::PrevScreen => {
+                        self.screen = self.screen.prev();
+                        self.clamp_audit_selection();
+                    }
+                    KeyAction::NextFocus => self.cycle_focus(true),
+                    KeyAction::PrevFocus => self.cycle_focus(false),
+                    KeyAction::ToggleSidebar => self.toggle_sidebar_overlay(),
+                    KeyAction::BeginFilter if self.screen == Screen::AuditLog => {
+                        self.begin_audit_filter();
+                    }
+                    KeyAction::ListNext
+                        if self.screen == Screen::AuditLog && self.focus == FocusPane::Main =>
+                    {
+                        self.audit_select_next();
+                    }
+                    KeyAction::ListPrev
+                        if self.screen == Screen::AuditLog && self.focus == FocusPane::Main =>
+                    {
+                        self.audit_select_prev();
+                    }
+                    KeyAction::SkipSplash
+                    | KeyAction::ToggleAck
+                    | KeyAction::ConfirmAck
+                    | KeyAction::BeginFilter
+                    | KeyAction::EndFilter
+                    | KeyAction::FilterBackspace
+                    | KeyAction::FilterChar(_)
+                    | KeyAction::ListNext
+                    | KeyAction::ListPrev => {}
+                }
+            }
         }
     }
 }
@@ -217,6 +332,12 @@ pub enum KeyAction {
     SkipSplash,
     ToggleAck,
     ConfirmAck,
+    BeginFilter,
+    EndFilter,
+    FilterBackspace,
+    FilterChar(char),
+    ListNext,
+    ListPrev,
 }
 
 #[cfg(test)]
@@ -232,7 +353,48 @@ mod tests {
             needs_ack,
             config_path: PathBuf::from("keld.toml"),
             scope_summary: "(no scope)".into(),
+            audit_entries: Vec::new(),
+            audit_path: PathBuf::from("audit.jsonl"),
         }
+    }
+
+    #[test]
+    fn audit_filter_and_selection() {
+        use keld_core::{AuditEntry, AuditOutcome};
+        let mut app = App::new(opts(false));
+        app.screen = Screen::AuditLog;
+        app.focus = FocusPane::Main;
+        app.audit_entries = vec![
+            AuditEntry {
+                timestamp: "2026-11-26T10:00:00Z".into(),
+                module: "scan".into(),
+                target: "10.0.0.5".into(),
+                parameters: "ports=22".into(),
+                outcome: AuditOutcome::Ok,
+            },
+            AuditEntry {
+                timestamp: "2026-11-26T11:00:00Z".into(),
+                module: "tls".into(),
+                target: "app.example.com".into(),
+                parameters: "sni".into(),
+                outcome: AuditOutcome::Error,
+            },
+        ];
+        app.handle_key(KeyAction::BeginFilter);
+        assert!(app.audit_filtering);
+        app.handle_key(KeyAction::FilterChar('t'));
+        app.handle_key(KeyAction::FilterChar('l'));
+        app.handle_key(KeyAction::FilterChar('s'));
+        assert_eq!(app.audit_filtered().len(), 1);
+        app.handle_key(KeyAction::EndFilter);
+        assert!(!app.audit_filtering);
+        app.handle_key(KeyAction::ListNext);
+        assert_eq!(app.audit_selected, 0);
+        app.clear_audit_filter();
+        app.handle_key(KeyAction::ListNext);
+        assert_eq!(app.audit_selected, 1);
+        app.handle_key(KeyAction::ListPrev);
+        assert_eq!(app.audit_selected, 0);
     }
 
     #[test]

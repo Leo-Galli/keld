@@ -29,6 +29,7 @@ Acceptance:
 
 ## Decisions log
 
+- 2026-11-26: Audit log is append-only JSONL (`audit.jsonl`); default `./audit.jsonl` else user data dir; TUI viewer is read-only with `/` filter and j/k select
 - 2026-11-26: Scope entries are IP, CIDR, or hostname (URL hosts stripped); no DNS in the gate; excludes win; empty includes invalid; summary `first (+n, ex:m)` for status/header
 - 2026-11-26: Event bus uses tokio `broadcast` (fan-out to CLI/TUI/audit); modules get `EventSender`; lag is reported, not blocking
 - 2026-11-26: Config precedence file < env < flags; persist ack to user config dir (or `--config` / loaded file); Space toggles ack checkbox, Enter confirms
