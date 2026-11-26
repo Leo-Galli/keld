@@ -415,6 +415,7 @@ fn build_client(timeout: Duration) -> Result<Client, FuzzError> {
         .timeout(timeout)
         .connect_timeout(timeout)
         .redirect(RedirectPolicy::none())
+        .http1_only()
         .user_agent("keld-fuzz/0.1")
         .build()
         .map_err(|e| FuzzError::Client(e.to_string()))
@@ -678,6 +679,16 @@ mod tests {
         path
     }
 
+    async fn wait_ready(addr: SocketAddr) {
+        for _ in 0..50 {
+            if tokio::net::TcpStream::connect(addr).await.is_ok() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        panic!("fuzz test server not ready at {addr}");
+    }
+
     async fn spawn_fuzz_server() -> (SocketAddr, tokio::task::JoinHandle<()>) {
         let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
             .await
@@ -689,9 +700,23 @@ mod tests {
                     break;
                 };
                 tokio::spawn(async move {
-                    let mut buf = vec![0u8; 4096];
-                    let _ =
-                        tokio::time::timeout(Duration::from_millis(500), tcp.read(&mut buf)).await;
+                    let mut buf = Vec::new();
+                    let mut tmp = [0u8; 1024];
+                    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+                    while tokio::time::Instant::now() < deadline {
+                        match tokio::time::timeout(Duration::from_millis(200), tcp.read(&mut tmp))
+                            .await
+                        {
+                            Ok(Ok(0)) => break,
+                            Ok(Ok(n)) => {
+                                buf.extend_from_slice(&tmp[..n]);
+                                if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                                    break;
+                                }
+                            }
+                            Ok(Err(_)) | Err(_) => break,
+                        }
+                    }
                     let req = String::from_utf8_lossy(&buf);
                     let path = req
                         .lines()
@@ -720,6 +745,7 @@ mod tests {
                 });
             }
         });
+        wait_ready(addr).await;
         (addr, handle)
     }
 
@@ -779,7 +805,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn dir_discovers_admin_filters_404() {
         let (addr, _server) = spawn_fuzz_server().await;
-        tokio::time::sleep(Duration::from_millis(30)).await;
         let wl = write_wordlist(&["admin", "missing", "nope"]);
         let url = format!("http://127.0.0.1:{}/", addr.port());
         let bus = EventBus::new(256);
@@ -798,7 +823,7 @@ mod tests {
         .unwrap();
         let module = FuzzModule::new(cfg, loopback_scope());
         let hits = module.run_fuzz(JobId::new(3), bus.sender()).await.unwrap();
-        assert_eq!(hits.len(), 1);
+        assert_eq!(hits.len(), 1, "expected admin hit, got {hits:?}");
         assert_eq!(hits[0].word, "admin");
         assert_eq!(hits[0].status, 200);
         let _ = std::fs::remove_file(wl);
@@ -807,7 +832,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn vhost_discovers_staging() {
         let (addr, _server) = spawn_fuzz_server().await;
-        tokio::time::sleep(Duration::from_millis(30)).await;
         let wl = write_wordlist(&["staging", "ghost"]);
         let url = format!("http://127.0.0.1:{}/", addr.port());
         let bus = EventBus::new(256);
@@ -826,7 +850,7 @@ mod tests {
         .unwrap();
         let module = FuzzModule::new(cfg, loopback_scope());
         let hits = module.run_fuzz(JobId::new(4), bus.sender()).await.unwrap();
-        assert_eq!(hits.len(), 1);
+        assert_eq!(hits.len(), 1, "expected staging hit, got {hits:?}");
         assert_eq!(hits[0].word, "staging");
         assert_eq!(hits[0].host_header.as_deref(), Some("staging.127.0.0.1"));
         let _ = std::fs::remove_file(wl);
