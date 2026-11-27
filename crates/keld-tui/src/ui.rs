@@ -15,6 +15,7 @@ use crate::http_view::HttpField;
 use crate::logo::{self, WORDMARK};
 use crate::net_view::NetField;
 use crate::probe_view::ProbeField;
+use crate::report_view::ReportField;
 use crate::scan_view::ScanField;
 use crate::screen::Screen;
 use crate::tls_view::TlsField;
@@ -318,6 +319,7 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, fo
         Screen::Dns => draw_dns(frame, area, app, focused),
         Screen::Net => draw_net(frame, area, app, focused),
         Screen::Hash => draw_hash(frame, area, app, focused),
+        Screen::Reports => draw_report(frame, area, app, focused),
         _ => {
             let title = format!(" {} ", app.screen.title());
             frame.render_widget(
@@ -1200,6 +1202,136 @@ fn draw_hash(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
     );
 }
 
+fn draw_report(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
+    let report = &app.report;
+    let state = match report.run_state {
+        crate::report_view::ReportRunState::Idle => "idle",
+        crate::report_view::ReportRunState::Done => "done",
+        crate::report_view::ReportRunState::Failed => "failed",
+    };
+
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(Span::styled(
+            format!(
+                "{}  {}",
+                field_label(
+                    report.field == ReportField::Input,
+                    "Input",
+                    &report.input,
+                    report.editing,
+                ),
+                field_label(
+                    report.field == ReportField::Output,
+                    "Output",
+                    &report.output,
+                    report.editing,
+                ),
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "{}  format:{}  state:{}",
+                field_label(
+                    report.field == ReportField::Title,
+                    "Title",
+                    &report.title,
+                    report.editing,
+                ),
+                report.format.as_str(),
+                state
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            "Enter edit  Tab fields  s export  l load  f format",
+            app.theme.muted_style(),
+        )),
+        Line::from(Span::styled(
+            format!("{} finding(s)  {}", report.findings.len(), report.message),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!(" {:<8} {:<8} {:<18} {}", "Sev", "Module", "Target", "Title"),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    if report.findings.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "(no findings yet)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let header_rows = 6u16;
+        let inner_h = area.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(header_rows + 2) as usize;
+        let selected = report.selected.min(report.findings.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, finding) in report
+            .findings
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(visible.max(1))
+        {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let title: String = finding.title.chars().take(28).collect();
+            let row = format!(
+                "{marker}{:<8} {:<8} {:<18} {title}",
+                finding.severity.as_str(),
+                truncate(&finding.module, 8, app.ascii),
+                truncate(&finding.target, 18, app.ascii),
+            );
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(row, style)));
+        }
+
+        lines.push(Line::from(""));
+        let detail = report
+            .findings
+            .get(selected)
+            .map(|f| {
+                if f.evidence.is_empty() {
+                    f.title.clone()
+                } else {
+                    format!("{} -- {}", f.title, f.evidence)
+                }
+            })
+            .unwrap_or_default();
+        lines.push(Line::from(Span::styled(
+            format!("Detail: {}", truncate(&detail, 70, app.ascii)),
+            app.theme.muted_style(),
+        )));
+    }
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(app.theme.text_style())
+            .block(panel_block(app, " Reports ", focused)),
+        area,
+    );
+}
+
 fn draw_fuzz(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
     let fuzz = &app.fuzz;
     let dry = if fuzz.dry_run { "x" } else { " " };
@@ -1827,6 +1959,8 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Screen::Net => format!("  s start  p dry-run  t tech  i ifaces  {list_hint} select"),
         Screen::Hash if app.hash.editing => "  Enter done  Tab fields".to_string(),
         Screen::Hash => format!("  s start  p dry-run  a algo  {list_hint} select"),
+        Screen::Reports if app.report.editing => "  Enter done  Tab fields".to_string(),
+        Screen::Reports => format!("  s export  l load  f format  {list_hint} select"),
         _ => String::new(),
     };
     let text = format!(
@@ -2416,6 +2550,22 @@ mod tests {
         assert!(shot.contains("Hash"));
         assert!(shot.contains("md5") || shot.contains("identify") || shot.contains("match"));
         assert_snapshot!("hash_80x24", shot);
+    }
+
+    #[test]
+    fn report_snapshot_80x24() {
+        let mut app = shell_app();
+        app.screen = Screen::Reports;
+        app.focus = FocusPane::Main;
+        app.report.input = "findings.json".into();
+        app.report.output = "report.html".into();
+        app.report.title = "demo".into();
+        app.report.message = "preview (placeholder)".into();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Reports"));
+        assert!(shot.contains("html") || shot.contains("export"));
+        assert!(shot.contains("HSTS") || shot.contains("tls") || shot.contains("high"));
+        assert_snapshot!("report_80x24", shot);
     }
 
     #[test]

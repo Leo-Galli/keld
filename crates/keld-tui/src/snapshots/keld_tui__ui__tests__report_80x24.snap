@@ -1,0 +1,28 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
+┌ Nav ─┐┌ Reports ─────────────────────────────────────────────────────────────┐
+│ Dash ││>Input [findings.json]   Output [report.html]                         │
+│ Scan ││ Title [demo]  format:html  state:idle                                │
+│ Prob ││Enter edit  Tab fields  s export  l load  f format                    │
+│ TLS  ││2 finding(s)  preview (placeholder)                                   │
+│ HTTP ││                                                                      │
+│ Fuzz ││ Sev      Module   Target             Title                           │
+│ DNS  ││> high     tls      ex.com:443         cert expires soon              │
+│ Net  ││ medium   http     https://ex.com     missing HSTS                    │
+│ Hash ││                                                                      │
+│*Rpt  ││Detail: cert expires soon -- notAfter in 12 days                      │
+│ Ws   ││                                                                      │
+│ Jobs ││                                                                      │
+│ Aud  ││                                                                      │
+│ Set  ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+└──────┘└──────────────────────────────────────────────────────────────────────┘
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  m sidebar  s export

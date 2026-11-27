@@ -6,6 +6,7 @@
 pub mod audit;
 pub mod config;
 pub mod event;
+pub mod finding;
 pub mod job;
 pub mod rate;
 pub mod scope;
@@ -19,6 +20,7 @@ pub use config::{
     ConfigError, ConfigFile, ConfigOverrides, ConfigWarning, LoadedConfig, ThemeName,
 };
 pub use event::{EventBus, EventSender, LogLevel, ModuleEvent, DEFAULT_BUS_CAPACITY};
+pub use finding::{Finding, FindingError, Severity};
 pub use job::{Job, JobError, JobId, JobState, ModuleKind};
 pub use rate::RateLimiter;
 pub use scope::{

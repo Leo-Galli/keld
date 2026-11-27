@@ -9,6 +9,7 @@ mod http_cmd;
 mod net_cmd;
 mod output;
 mod probe_cmd;
+mod report_cmd;
 mod scan_cmd;
 mod signal;
 mod tls_cmd;
@@ -206,6 +207,21 @@ enum Commands {
         /// Force algo: `auto`, `md5`, `sha1`, `sha256`, `sha384`, `sha512` (default: auto)
         #[arg(long, default_value = "auto")]
         algo: String,
+    },
+    /// Merge findings into JSON, Markdown, HTML, CSV, or SARIF
+    Report {
+        /// Findings JSON file(s); full document, `{ "findings": [...] }`, or a bare array
+        #[arg(short, long = "input", value_name = "PATH", required = true)]
+        inputs: Vec<PathBuf>,
+        /// Output format: `json`, `markdown`, `html`, `csv`, `sarif` (default: json)
+        #[arg(short, long, default_value = "json")]
+        format: String,
+        /// Write to this path (default: stdout)
+        #[arg(short, long, value_name = "PATH")]
+        output: Option<PathBuf>,
+        /// Optional report title
+        #[arg(long)]
+        title: Option<String>,
     },
 }
 
@@ -461,6 +477,28 @@ fn main() -> Result<ExitCode> {
             .map_err(|e| anyhow::anyhow!(e))?;
             Ok(ExitCode::from(code))
         }
+        Some(Commands::Report {
+            inputs,
+            format,
+            output,
+            title,
+        }) => {
+            let mut audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
+            let code = report_cmd::run(
+                report_cmd::ReportArgs {
+                    inputs,
+                    format,
+                    output,
+                    title,
+                    dry_run: cli.dry_run,
+                    json: cli.json,
+                    color,
+                },
+                &mut audit,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            Ok(ExitCode::from(code))
+        }
         None => {
             let audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
 
@@ -512,8 +550,44 @@ mod tests {
         assert!(help.contains("dns") || help.contains("Dns") || help.contains("DNS"));
         assert!(help.contains("net") || help.contains("Net"));
         assert!(help.contains("hash") || help.contains("Hash"));
+        assert!(help.contains("report") || help.contains("Report"));
         assert!(help.contains("--json"));
         assert!(help.contains("--dry-run"));
+    }
+
+    #[test]
+    fn parses_report_with_format() {
+        let cli = Cli::try_parse_from([
+            "keld",
+            "--dry-run",
+            "report",
+            "-i",
+            "a.json",
+            "-i",
+            "b.json",
+            "-f",
+            "html",
+            "-o",
+            "out.html",
+            "--title",
+            "demo",
+        ])
+        .unwrap();
+        assert!(cli.dry_run);
+        match cli.command {
+            Some(Commands::Report {
+                inputs,
+                format,
+                output,
+                title,
+            }) => {
+                assert_eq!(inputs.len(), 2);
+                assert_eq!(format, "html");
+                assert_eq!(output.unwrap().as_os_str(), "out.html");
+                assert_eq!(title.as_deref(), Some("demo"));
+            }
+            other => panic!("expected Report, got {other:?}"),
+        }
     }
 
     #[test]
