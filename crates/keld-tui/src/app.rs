@@ -8,6 +8,7 @@ use crate::commands::{self, CommandId};
 use crate::dashboard::DashboardState;
 use crate::dns_view::{DnsRunState, DnsView};
 use crate::fuzz_view::{FuzzRunState, FuzzView};
+use crate::hash_view::{HashRunState, HashView};
 use crate::http_view::{HttpRunState, HttpView};
 use crate::keys::KeyPreset;
 use crate::net_view::{NetRunState, NetView};
@@ -146,6 +147,8 @@ pub struct App {
     pub dns: DnsView,
     /// Net module form + findings.
     pub net: NetView,
+    /// Hash module form + findings.
+    pub hash: HashView,
     /// Tick accumulator so job elapsed advances ~1s even at 30 FPS.
     tick_accum: u32,
 }
@@ -196,6 +199,7 @@ impl App {
             fuzz: FuzzView::default(),
             dns: DnsView::default(),
             net: NetView::default(),
+            hash: HashView::default(),
             tick_accum: 0,
         }
     }
@@ -212,6 +216,7 @@ impl App {
         self.fuzz.poll();
         self.dns.poll();
         self.net.poll();
+        self.hash.poll();
         // ~30 FPS tick; advance job clocks once per ~30 ticks (~1s).
         self.tick_accum = self.tick_accum.saturating_add(1);
         if self.tick_accum < 30 {
@@ -298,6 +303,17 @@ impl App {
         }
     }
 
+    pub fn start_hash(&mut self) {
+        match self.hash.start() {
+            Ok(()) => {}
+            Err(e) => {
+                self.hash.error = Some(e.clone());
+                self.hash.message = e;
+                self.hash.run_state = HashRunState::Failed;
+            }
+        }
+    }
+
     pub fn toggle_scan_dry_run(&mut self) {
         self.scan.dry_run = !self.scan.dry_run;
     }
@@ -330,8 +346,16 @@ impl App {
         self.net.dry_run = !self.net.dry_run;
     }
 
+    pub fn toggle_hash_dry_run(&mut self) {
+        self.hash.dry_run = !self.hash.dry_run;
+    }
+
     pub fn cycle_net_technique(&mut self) {
         self.net.cycle_technique();
+    }
+
+    pub fn cycle_hash_algo(&mut self) {
+        self.hash.cycle_algo();
     }
 
     pub fn refresh_net_interfaces(&mut self) {
@@ -396,6 +420,14 @@ impl App {
 
     pub fn net_prev_field(&mut self) {
         self.net.field = self.net.field.prev();
+    }
+
+    pub fn hash_next_field(&mut self) {
+        self.hash.field = self.hash.field.next();
+    }
+
+    pub fn hash_prev_field(&mut self) {
+        self.hash.field = self.hash.field.prev();
     }
 
     pub fn job_select_next(&mut self) {
@@ -804,6 +836,19 @@ impl App {
             return;
         }
 
+        if self.hash.editing && self.screen == Screen::Hash {
+            match key {
+                KeyAction::Quit | KeyAction::CloseOverlay => self.hash.editing = false,
+                KeyAction::Activate | KeyAction::EndFilter => self.hash.editing = false,
+                KeyAction::FilterBackspace => self.hash.field_backspace(),
+                KeyAction::FilterChar(c) => self.hash.field_push(c),
+                KeyAction::NextFocus => self.hash_next_field(),
+                KeyAction::PrevFocus => self.hash_prev_field(),
+                _ => {}
+            }
+            return;
+        }
+
         if !matches!(key, KeyAction::ChordG) {
             self.pending_g = false;
         }
@@ -838,6 +883,8 @@ impl App {
                     self.dns_next_field();
                 } else if self.screen == Screen::Net && self.focus == FocusPane::Main {
                     self.net_next_field();
+                } else if self.screen == Screen::Hash && self.focus == FocusPane::Main {
+                    self.hash_next_field();
                 } else {
                     self.cycle_focus(true);
                 }
@@ -857,6 +904,8 @@ impl App {
                     self.dns_prev_field();
                 } else if self.screen == Screen::Net && self.focus == FocusPane::Main {
                     self.net_prev_field();
+                } else if self.screen == Screen::Hash && self.focus == FocusPane::Main {
+                    self.hash_prev_field();
                 } else {
                     self.cycle_focus(false);
                 }
@@ -872,6 +921,7 @@ impl App {
             KeyAction::ScanStart if self.screen == Screen::Fuzz => self.start_fuzz(),
             KeyAction::ScanStart if self.screen == Screen::Dns => self.start_dns(),
             KeyAction::ScanStart if self.screen == Screen::Net => self.start_net(),
+            KeyAction::ScanStart if self.screen == Screen::Hash => self.start_hash(),
             KeyAction::ScanToggleDryRun if self.screen == Screen::Scan => {
                 self.toggle_scan_dry_run();
             }
@@ -893,6 +943,9 @@ impl App {
             KeyAction::ScanToggleDryRun if self.screen == Screen::Net => {
                 self.toggle_net_dry_run();
             }
+            KeyAction::ScanToggleDryRun if self.screen == Screen::Hash => {
+                self.toggle_hash_dry_run();
+            }
             KeyAction::ScanToggleSyn if self.screen == Screen::Scan => {
                 self.toggle_scan_syn();
             }
@@ -904,6 +957,9 @@ impl App {
             }
             KeyAction::NetRefreshIfaces if self.screen == Screen::Net => {
                 self.refresh_net_interfaces();
+            }
+            KeyAction::HashCycleAlgo if self.screen == Screen::Hash => {
+                self.cycle_hash_algo();
             }
             KeyAction::Activate if self.screen == Screen::Scan && self.focus == FocusPane::Main => {
                 self.scan.editing = true;
@@ -927,6 +983,9 @@ impl App {
             }
             KeyAction::Activate if self.screen == Screen::Net && self.focus == FocusPane::Main => {
                 self.net.editing = true;
+            }
+            KeyAction::Activate if self.screen == Screen::Hash && self.focus == FocusPane::Main => {
+                self.hash.editing = true;
             }
             KeyAction::ListNext if self.audit_list_nav() => self.audit_select_next(),
             KeyAction::ListPrev if self.audit_list_nav() => self.audit_select_prev(),
@@ -952,6 +1011,8 @@ impl App {
             KeyAction::ListPrev if self.dns_list_nav() => self.dns.select_prev(),
             KeyAction::ListNext if self.net_list_nav() => self.net.select_next(),
             KeyAction::ListPrev if self.net_list_nav() => self.net.select_prev(),
+            KeyAction::ListNext if self.hash_list_nav() => self.hash.select_next(),
+            KeyAction::ListPrev if self.hash_list_nav() => self.hash.select_prev(),
             KeyAction::ChordG if self.key_preset == KeyPreset::Vim => {
                 if self.pending_g {
                     if self.audit_list_nav() {
@@ -984,7 +1045,8 @@ impl App {
             | KeyAction::ScanToggleSyn
             | KeyAction::DnsToggleCt
             | KeyAction::NetCycleTechnique
-            | KeyAction::NetRefreshIfaces => {}
+            | KeyAction::NetRefreshIfaces
+            | KeyAction::HashCycleAlgo => {}
         }
     }
 
@@ -1023,6 +1085,10 @@ impl App {
     fn net_list_nav(&self) -> bool {
         self.screen == Screen::Net && self.focus == FocusPane::Main && !self.net.editing
     }
+
+    fn hash_list_nav(&self) -> bool {
+        self.screen == Screen::Hash && self.focus == FocusPane::Main && !self.hash.editing
+    }
 }
 
 /// Normalized keys the shell understands.
@@ -1058,6 +1124,7 @@ pub enum KeyAction {
     DnsToggleCt,
     NetCycleTechnique,
     NetRefreshIfaces,
+    HashCycleAlgo,
 }
 
 #[cfg(test)]

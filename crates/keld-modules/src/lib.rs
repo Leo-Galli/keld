@@ -10,6 +10,7 @@ use keld_core::{EventSender, JobId, ModuleKind};
 
 pub mod dns;
 pub mod fuzz;
+pub mod hash;
 pub mod http;
 pub mod net;
 pub mod ports;
@@ -28,6 +29,10 @@ pub use fuzz::{
     parse_fuzz_summary, parse_u16_list, parse_u64_list, FuzzConfig, FuzzError, FuzzFilters,
     FuzzHit, FuzzMode, FuzzModule, FuzzRunOpts, DEFAULT_FILTER_STATUS, DEFAULT_FUZZ_CONCURRENCY,
     DEFAULT_FUZZ_TIMEOUT_MS,
+};
+pub use hash::{
+    identify_hash, parse_hash_summary, HashAlgo, HashConfig, HashError, HashHit, HashKind,
+    HashModule, HashRunOpts, DEFAULT_HASH_CONCURRENCY,
 };
 pub use http::{
     parse_http_summary, HttpConfig, HttpError, HttpFinding, HttpModule, HttpSeverity,
@@ -69,9 +74,9 @@ pub trait Module: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 }
 
-/// Registered modules available to CLI/TUI wiring (stub + scan + probe + tls + http + fuzz + dns + net).
+/// Registered modules available to CLI/TUI wiring (stub + scan + probe + tls + http + fuzz + dns + net + hash).
 pub fn module_count() -> usize {
-    8
+    9
 }
 
 /// Build the stub used for event-bus wiring tests and early UI demos.
@@ -85,8 +90,8 @@ mod tests {
     use keld_core::{EventBus, Job, JobState, ModuleEvent};
 
     #[test]
-    fn registry_lists_stub_scan_probe_tls_http_fuzz_dns_and_net() {
-        assert_eq!(module_count(), 8);
+    fn registry_lists_stub_scan_probe_tls_http_fuzz_dns_net_and_hash() {
+        assert_eq!(module_count(), 9);
         assert_eq!(stub_module().kind(), ModuleKind::Stub);
         assert_eq!(
             ScanModule::new(
@@ -177,6 +182,23 @@ mod tests {
             )
             .kind(),
             ModuleKind::Net
+        );
+        assert_eq!(
+            HashModule::new(
+                HashConfig::from_parts(
+                    "5eb63bbbe01eeed093cb22bb8f5acdc3",
+                    None,
+                    None,
+                    HashRunOpts {
+                        concurrency: 1,
+                        dry_run: true,
+                        rate_per_sec: None,
+                    },
+                )
+                .unwrap(),
+            )
+            .kind(),
+            ModuleKind::Hash
         );
     }
 

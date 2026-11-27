@@ -10,6 +10,7 @@ use crate::app::{App, FocusPane, Overlay, Phase};
 use crate::dashboard::{self, severity_label};
 use crate::dns_view::DnsField;
 use crate::fuzz_view::FuzzField;
+use crate::hash_view::HashField;
 use crate::http_view::HttpField;
 use crate::logo::{self, WORDMARK};
 use crate::net_view::NetField;
@@ -316,6 +317,7 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, fo
         Screen::Fuzz => draw_fuzz(frame, area, app, focused),
         Screen::Dns => draw_dns(frame, area, app, focused),
         Screen::Net => draw_net(frame, area, app, focused),
+        Screen::Hash => draw_hash(frame, area, app, focused),
         _ => {
             let title = format!(" {} ", app.screen.title());
             frame.render_widget(
@@ -1062,6 +1064,142 @@ fn draw_net(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
     );
 }
 
+fn draw_hash(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
+    let hash = &app.hash;
+    let dry = if hash.dry_run { "x" } else { " " };
+    let state = match hash.run_state {
+        crate::hash_view::HashRunState::Idle => "idle",
+        crate::hash_view::HashRunState::Running => "running",
+        crate::hash_view::HashRunState::Done => "done",
+        crate::hash_view::HashRunState::Failed => "failed",
+    };
+    let bar_w = (area.width.saturating_sub(28) as usize).clamp(8, 24);
+    let frac = hash.progress_fraction().unwrap_or(0.0);
+    let filled = ((frac * bar_w as f64).round() as usize).min(bar_w);
+    let bar = if app.ascii {
+        format!("{}{}", "#".repeat(filled), "-".repeat(bar_w - filled))
+    } else {
+        format!("{}{}", "█".repeat(filled), "░".repeat(bar_w - filled))
+    };
+
+    let hash_preview: String = hash.hash.chars().take(40).collect();
+
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(Span::styled(
+            format!(
+                "{}  {}",
+                field_label(
+                    hash.field == HashField::Hash,
+                    "Hash",
+                    &hash_preview,
+                    hash.editing,
+                ),
+                field_label(
+                    hash.field == HashField::Wordlist,
+                    "Wordlist",
+                    &hash.wordlist,
+                    hash.editing,
+                ),
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "{}  [{}] dry-run  algo:{}  state:{}",
+                field_label(
+                    hash.field == HashField::Concurrency,
+                    "Conc",
+                    &hash.concurrency,
+                    hash.editing
+                ),
+                dry,
+                hash.algo_label(),
+                state
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            "Enter edit  Tab fields  s start  p dry-run  a algo",
+            app.theme.muted_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "Progress {} {}  {}",
+                bar,
+                hash.progress_label(),
+                hash.message
+            ),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!(" {:<10} {:<12} {}", "Kind", "Algo", "Detail"),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    if hash.results.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "(no findings yet)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let header_rows = 7u16;
+        let inner_h = area.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(header_rows + 2) as usize;
+        let selected = hash.selected.min(hash.results.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, hit) in hash
+            .results
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(visible.max(1))
+        {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let detail: String = hit.detail.chars().take(40).collect();
+            let row = format!(
+                "{marker}{:<10} {:<12} {detail}",
+                hit.kind.as_str().chars().take(10).collect::<String>(),
+                hit.algo.as_str().chars().take(12).collect::<String>(),
+            );
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(row, style)));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("Detail: {}", hash.detail_line()),
+        app.theme.muted_style(),
+    )));
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(app.theme.text_style())
+            .block(panel_block(app, " Hash ", focused)),
+        area,
+    );
+}
+
 fn draw_fuzz(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
     let fuzz = &app.fuzz;
     let dry = if fuzz.dry_run { "x" } else { " " };
@@ -1687,6 +1825,8 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Screen::Dns => format!("  s start  p dry-run  c ct  {list_hint} select"),
         Screen::Net if app.net.editing => "  Enter done  Tab fields".to_string(),
         Screen::Net => format!("  s start  p dry-run  t tech  i ifaces  {list_hint} select"),
+        Screen::Hash if app.hash.editing => "  Enter done  Tab fields".to_string(),
+        Screen::Hash => format!("  s start  p dry-run  a algo  {list_hint} select"),
         _ => String::new(),
     };
     let text = format!(
@@ -2245,6 +2385,37 @@ mod tests {
         assert!(shot.contains("10.0.0.0/30") || shot.contains("10.0.0.1"));
         assert!(shot.contains("tcp") || shot.contains("iface"));
         assert_snapshot!("net_80x24", shot);
+    }
+
+    #[test]
+    fn hash_snapshot_80x24() {
+        use keld_modules::{HashAlgo, HashHit, HashKind};
+        let mut app = shell_app();
+        app.screen = Screen::Hash;
+        app.focus = FocusPane::Main;
+        app.hash.hash = "5eb63bbbe01eeed093cb22bb8f5acdc3".into();
+        app.hash.wordlist = "rockyou.txt".into();
+        app.hash.results = vec![
+            HashHit {
+                kind: HashKind::Identify,
+                algo: HashAlgo::Md5,
+                detail: "32-hex digest (5eb63bbbe01eeeed...)".into(),
+                planned: false,
+            },
+            HashHit {
+                kind: HashKind::Match,
+                algo: HashAlgo::Md5,
+                detail: "hello world".into(),
+                planned: false,
+            },
+        ];
+        app.hash.done = 2;
+        app.hash.total = 2;
+        app.hash.message = "checking".into();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Hash"));
+        assert!(shot.contains("md5") || shot.contains("identify") || shot.contains("match"));
+        assert_snapshot!("hash_80x24", shot);
     }
 
     #[test]

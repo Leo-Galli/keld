@@ -150,15 +150,17 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
             app.http.editing,
             app.fuzz.editing,
             app.dns.editing,
-            app.net.editing
+            app.net.editing,
+            app.hash.editing
         ),
-        (Screen::Scan, true, _, _, _, _, _, _)
-            | (Screen::Probe, _, true, _, _, _, _, _)
-            | (Screen::Tls, _, _, true, _, _, _, _)
-            | (Screen::Http, _, _, _, true, _, _, _)
-            | (Screen::Fuzz, _, _, _, _, true, _, _)
-            | (Screen::Dns, _, _, _, _, _, true, _)
-            | (Screen::Net, _, _, _, _, _, _, true)
+        (Screen::Scan, true, _, _, _, _, _, _, _)
+            | (Screen::Probe, _, true, _, _, _, _, _, _)
+            | (Screen::Tls, _, _, true, _, _, _, _, _)
+            | (Screen::Http, _, _, _, true, _, _, _, _)
+            | (Screen::Fuzz, _, _, _, _, true, _, _, _)
+            | (Screen::Dns, _, _, _, _, _, true, _, _)
+            | (Screen::Net, _, _, _, _, _, _, true, _)
+            | (Screen::Hash, _, _, _, _, _, _, _, true)
     );
     if module_editing {
         return match code {
@@ -188,6 +190,7 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
                     | Screen::Fuzz
                     | Screen::Dns
                     | Screen::Net
+                    | Screen::Hash
             ) =>
         {
             return Some(KeyAction::ScanStart);
@@ -202,6 +205,7 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
                     | Screen::Fuzz
                     | Screen::Dns
                     | Screen::Net
+                    | Screen::Hash
             ) =>
         {
             return Some(KeyAction::ScanToggleDryRun);
@@ -217,6 +221,9 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         }
         KeyCode::Char('i') if app.screen == Screen::Net => {
             return Some(KeyAction::NetRefreshIfaces);
+        }
+        KeyCode::Char('a') if app.screen == Screen::Hash => {
+            return Some(KeyAction::HashCycleAlgo);
         }
         KeyCode::Char('/') if app.screen == Screen::AuditLog => {
             return Some(KeyAction::BeginFilter);
@@ -274,6 +281,7 @@ fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) ->
             | Screen::Fuzz
             | Screen::Dns
             | Screen::Net
+            | Screen::Hash
     ) && (!dual || app.focus == FocusPane::Main)
         && !(app.screen == Screen::Scan && app.scan.editing)
         && !(app.screen == Screen::Probe && app.probe.editing)
@@ -281,7 +289,8 @@ fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) ->
         && !(app.screen == Screen::Http && app.http.editing)
         && !(app.screen == Screen::Fuzz && app.fuzz.editing)
         && !(app.screen == Screen::Dns && app.dns.editing)
-        && !(app.screen == Screen::Net && app.net.editing);
+        && !(app.screen == Screen::Net && app.net.editing)
+        && !(app.screen == Screen::Hash && app.hash.editing);
     let audit_list = app.screen == Screen::AuditLog && main_list;
     let sidebar_nav = !dual || app.focus == FocusPane::Sidebar;
 
