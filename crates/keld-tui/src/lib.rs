@@ -19,6 +19,7 @@ pub mod symbols;
 pub mod theme;
 pub mod tls_view;
 pub mod ui;
+pub mod workspace_view;
 
 pub use app::{App, FocusPane, Overlay, TuiOptions};
 pub use commands::{filter_commands, Command, CommandId};

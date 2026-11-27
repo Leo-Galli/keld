@@ -67,7 +67,7 @@ Use only on systems you own or are explicitly authorized to test. Active modules
 | `net` | Local interfaces; authorized subnet discovery (ARP/ICMP when permitted, TCP fallback) |
 | `hash` | Hash identification and offline wordlist checks |
 | `report` | JSON, Markdown, HTML, CSV, SARIF |
-| `workspace` | Local SQLite projects |
+| `workspace` | Local SQLite projects (scope, findings, audit) |
 
 ## Keybindings (TUI)
 
@@ -83,6 +83,7 @@ Use only on systems you own or are explicitly authorized to test. Active modules
 | `s` / `p` / `y` | Scan: start / dry-run / request SYN |
 | `s` / `p` / `t` / `i` | Net: start / dry-run / technique / refresh ifaces |
 | `s` / `l` / `f` | Reports: export / load findings / cycle format |
+| `e` / `n` / Enter / `d` | Workspace: edit fields / create / open / delete |
 | Ctrl+C | Quit (confirm if jobs running) |
 
 Vim and Arrows presets switch from the command palette (Settings persistence in KL-023). See [DESIGN.md](DESIGN.md).

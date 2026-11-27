@@ -165,11 +165,20 @@ pub fn load(path: &Path) -> Result<Scope, ScopeError> {
         path: path.to_path_buf(),
         message: e.to_string(),
     })?;
-    let file: ScopeFile = toml::from_str(&text).map_err(|e| ScopeError::Parse {
-        path: path.to_path_buf(),
+    parse_toml_with_source(&text, Some(path.to_path_buf()))
+}
+
+/// Parse and validate scope TOML text (no file path).
+pub fn parse_toml(text: &str) -> Result<Scope, ScopeError> {
+    parse_toml_with_source(text, None)
+}
+
+fn parse_toml_with_source(text: &str, source: Option<PathBuf>) -> Result<Scope, ScopeError> {
+    let file: ScopeFile = toml::from_str(text).map_err(|e| ScopeError::Parse {
+        path: source.clone().unwrap_or_else(|| PathBuf::from("<toml>")),
         message: e.to_string(),
     })?;
-    parse_file(file, Some(path.to_path_buf()))
+    parse_file(file, source)
 }
 
 /// Resolve scope: explicit path, else `./scope.toml` if present, else empty.

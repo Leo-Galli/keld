@@ -141,29 +141,19 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         };
     }
 
-    let module_editing = matches!(
-        (
-            app.screen,
-            app.scan.editing,
-            app.probe.editing,
-            app.tls.editing,
-            app.http.editing,
-            app.fuzz.editing,
-            app.dns.editing,
-            app.net.editing,
-            app.hash.editing,
-            app.report.editing
-        ),
-        (Screen::Scan, true, _, _, _, _, _, _, _, _)
-            | (Screen::Probe, _, true, _, _, _, _, _, _, _)
-            | (Screen::Tls, _, _, true, _, _, _, _, _, _)
-            | (Screen::Http, _, _, _, true, _, _, _, _, _)
-            | (Screen::Fuzz, _, _, _, _, true, _, _, _, _)
-            | (Screen::Dns, _, _, _, _, _, true, _, _, _)
-            | (Screen::Net, _, _, _, _, _, _, true, _, _)
-            | (Screen::Hash, _, _, _, _, _, _, _, true, _)
-            | (Screen::Reports, _, _, _, _, _, _, _, _, true)
-    );
+    let module_editing = match app.screen {
+        Screen::Scan => app.scan.editing,
+        Screen::Probe => app.probe.editing,
+        Screen::Tls => app.tls.editing,
+        Screen::Http => app.http.editing,
+        Screen::Fuzz => app.fuzz.editing,
+        Screen::Dns => app.dns.editing,
+        Screen::Net => app.net.editing,
+        Screen::Hash => app.hash.editing,
+        Screen::Reports => app.report.editing,
+        Screen::Workspace => app.workspace.editing,
+        _ => false,
+    };
     if module_editing {
         return match code {
             KeyCode::Esc => Some(KeyAction::CloseOverlay),
@@ -234,6 +224,27 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) -> Opt
         KeyCode::Char('f') if app.screen == Screen::Reports => {
             return Some(KeyAction::ReportCycleFormat);
         }
+        KeyCode::Char('n') if app.screen == Screen::Workspace => {
+            return Some(KeyAction::WorkspaceCreate);
+        }
+        KeyCode::Char('d') if app.screen == Screen::Workspace => {
+            return Some(KeyAction::WorkspaceDelete);
+        }
+        KeyCode::Char('i') if app.screen == Screen::Workspace => {
+            return Some(KeyAction::WorkspaceImportScope);
+        }
+        KeyCode::Char('f') if app.screen == Screen::Workspace => {
+            return Some(KeyAction::WorkspaceImportFindings);
+        }
+        KeyCode::Char('a') if app.screen == Screen::Workspace => {
+            return Some(KeyAction::WorkspaceImportAudit);
+        }
+        KeyCode::Char('r') if app.screen == Screen::Workspace => {
+            return Some(KeyAction::WorkspaceRefresh);
+        }
+        KeyCode::Char('e') if app.screen == Screen::Workspace => {
+            return Some(KeyAction::WorkspaceEdit);
+        }
         KeyCode::Char('/') if app.screen == Screen::AuditLog => {
             return Some(KeyAction::BeginFilter);
         }
@@ -292,6 +303,7 @@ fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) ->
             | Screen::Net
             | Screen::Hash
             | Screen::Reports
+            | Screen::Workspace
     ) && (!dual || app.focus == FocusPane::Main)
         && !(app.screen == Screen::Scan && app.scan.editing)
         && !(app.screen == Screen::Probe && app.probe.editing)
@@ -301,7 +313,8 @@ fn map_nav_key(code: KeyCode, modifiers: KeyModifiers, app: &App, width: u16) ->
         && !(app.screen == Screen::Dns && app.dns.editing)
         && !(app.screen == Screen::Net && app.net.editing)
         && !(app.screen == Screen::Hash && app.hash.editing)
-        && !(app.screen == Screen::Reports && app.report.editing);
+        && !(app.screen == Screen::Reports && app.report.editing)
+        && !(app.screen == Screen::Workspace && app.workspace.editing);
     let audit_list = app.screen == Screen::AuditLog && main_list;
     let sidebar_nav = !dual || app.focus == FocusPane::Sidebar;
 

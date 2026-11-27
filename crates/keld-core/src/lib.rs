@@ -10,6 +10,7 @@ pub mod finding;
 pub mod job;
 pub mod rate;
 pub mod scope;
+pub mod workspace;
 
 pub use audit::{
     default_audit_path, format_rfc3339_utc, AuditEntry, AuditError, AuditLog, AuditOutcome,
@@ -24,8 +25,12 @@ pub use finding::{Finding, FindingError, Severity};
 pub use job::{Job, JobError, JobId, JobState, ModuleKind};
 pub use rate::RateLimiter;
 pub use scope::{
-    load as load_scope, load_optional as load_scope_optional, Scope, ScopeEntry, ScopeError,
-    DEFAULT_SCOPE_FILE,
+    load as load_scope, load_optional as load_scope_optional, parse_toml as parse_scope_toml,
+    Scope, ScopeEntry, ScopeError, DEFAULT_SCOPE_FILE,
+};
+pub use workspace::{
+    Workspace, WorkspaceError, WorkspaceInfo, WorkspaceStats, WorkspaceStore, WORKSPACES_DIR_ENV,
+    WORKSPACE_DB_FILE,
 };
 
 /// Crate version string (workspace package version).
