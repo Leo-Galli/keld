@@ -2,10 +2,11 @@
 
 ## Current task
 
-**KL-021** -- `workspace`: SQLite projects (scope, results, audit); CLI + TUI
+**KL-022** -- Findings view (cross-module) + detail popup + export
 
 ## Done
 
+- **KL-021** -- `workspace`: SQLite projects (scope, results, audit); CLI + TUI -- 2026-11-27 -- https://github.com/Leo-Galli/keld/pull/42
 - **KL-020** -- `report`: JSON/Markdown/HTML/CSV/SARIF; HTML logo; CLI + TUI -- 2026-11-27 -- https://github.com/Leo-Galli/keld/pull/40
 - **KL-019** -- `hash`: type ID + offline wordlist check; CLI + TUI + tests -- 2026-11-27 -- https://github.com/Leo-Galli/keld/pull/38
 - **KL-018** -- `net`: interfaces + authorized subnet discovery (ARP/ICMP/TCP fallback); CLI + TUI + tests -- 2026-11-27 -- https://github.com/Leo-Galli/keld/pull/36
@@ -37,6 +38,7 @@
 
 ## Decisions log
 
+- 2026-11-27: Workspace DB is `{data_dir}/keld/workspaces/<name>/workspace.sqlite` (override `KELD_WORKSPACES_DIR`); rusqlite 0.43 bundled; schema holds scope TOML + findings + audit; name = `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`; CLI subcommands under `keld workspace`; TUI Enter activates (loads scope/findings/audit into App), `n` create, `d` delete, `i`/`f`/`a` import, `e` edit fields, `r` refresh; no automatic write-back of live module results yet (import/export only)
 - 2026-11-27: Report is offline merge/export (no scope gate). Canonical input is findings JSON (full `ReportDocument`, `{ "findings": [...] }`, or bare array); multi `-i` concatenates. Formats: json / markdown / html / csv / sarif (2.1.0). HTML is self-contained with Unicode KELD logo + teal/amber CSS. SARIF maps critical/high->error, medium->warning, low/info->note. TUI Reports: `s` export, `l` load, `f` cycle format; placeholder findings until load/workspace
 - 2026-11-27: Hash is offline only (no network, no scope gate); identify by hex length (md5/sha1/sha256/sha384/sha512) or `$1$`/`$5$`/`$6$`/`$2a$`/`$2b$`/`$2y$` prefixes; wordlist checks only crackable hex digests via md-5/sha1/sha2 0.11; modular crypt is identify-only; `--algo auto` default; TUI Hash: `s`/`p`, `a` cycles algo
 - 2026-11-27: Net lists interfaces via if-addrs 0.15; discovery expands CIDR (max 1024 hosts, IPv4 skips network/broadcast); Auto cascade prefers ARP then ICMP then TCP. ARP who-has is not injected (no link-layer stack; Npcap reported only), same honesty as SYN. ICMP uses raw ICMPv4 when the socket opens; otherwise TCP connect to default ports 80,443,22,445. Doctor reports icmp/arp. TUI Net: `s`/`p`, `t` cycles technique, `i` refreshes ifaces
@@ -67,7 +69,6 @@
 
 ### Report, workspace, quality
 
-- **KL-021** -- `workspace`: SQLite projects (scope, results, audit); CLI + TUI
 - **KL-022** -- Findings view (cross-module) + detail popup + export
 - **KL-023** -- Settings screen wired to config; rate limits; splash/mouse/ascii/theme
 - **KL-024** -- Completions + man page at build time
