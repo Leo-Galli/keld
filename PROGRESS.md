@@ -2,10 +2,11 @@
 
 ## Current task
 
-**KL-019** -- `hash`: type ID + offline wordlist check; CLI + TUI + tests
+**KL-020** -- `report`: JSON/Markdown/HTML/CSV/SARIF; HTML logo; CLI + TUI
 
 ## Done
 
+- **KL-019** -- `hash`: type ID + offline wordlist check; CLI + TUI + tests -- 2026-11-27 -- https://github.com/Leo-Galli/keld/pull/38
 - **KL-018** -- `net`: interfaces + authorized subnet discovery (ARP/ICMP/TCP fallback); CLI + TUI + tests -- 2026-11-27 -- https://github.com/Leo-Galli/keld/pull/36
 - **KL-017** -- `dns`: records, AXFR check, wordlist + CT subdomains; CLI + TUI + tests -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/34
 - **KL-016** -- `fuzz`: dir + vhost wordlist discovery, filters; CLI + TUI + tests -- 2026-11-26 -- https://github.com/Leo-Galli/keld/pull/31
@@ -35,6 +36,7 @@
 
 ## Decisions log
 
+- 2026-11-27: Hash is offline only (no network, no scope gate); identify by hex length (md5/sha1/sha256/sha384/sha512) or `$1$`/`$5$`/`$6$`/`$2a$`/`$2b$`/`$2y$` prefixes; wordlist checks only crackable hex digests via md-5/sha1/sha2 0.11; modular crypt is identify-only; `--algo auto` default; TUI Hash: `s`/`p`, `a` cycles algo
 - 2026-11-27: Net lists interfaces via if-addrs 0.15; discovery expands CIDR (max 1024 hosts, IPv4 skips network/broadcast); Auto cascade prefers ARP then ICMP then TCP. ARP who-has is not injected (no link-layer stack; Npcap reported only), same honesty as SYN. ICMP uses raw ICMPv4 when the socket opens; otherwise TCP connect to default ports 80,443,22,445. Doctor reports icmp/arp. TUI Net: `s`/`p`, `t` cycles technique, `i` refreshes ifaces
 - 2026-11-26: DNS uses hickory-resolver 0.26 (system or injected resolvers) for A/AAAA/MX/NS/TXT/CNAME/SOA; AXFR is a raw TCP length-prefixed probe (no hickory-client; still alpha) reporting OPEN as high / REFUSED as info; wordlist optional (`-w`); CT via crt.sh JSON (`--ct` default on, `--no-ct` off) with injectable `ct_base_url` for tests; TUI DNS reuses `s`/`p` and toggles CT with `c`
 - 2026-11-26: Fuzz uses reqwest 0.13 with rustls; modes `dir` (path append) and `vhost` (`Host: {word}.{apex}`); default filter status 404; match-status overrides filter when set; filter-size hides body sizes; no redirects; wordlist skips blanks and `#` comments; dry-run plans each word; TUI Fuzz reuses `s`/`p`
@@ -60,10 +62,6 @@
 - 2026-11-25: First commit on `main` is empty; KL-001 landed via squash-merge of PR #1
 
 ## Backlog (ordered)
-
-### Modules
-
-- **KL-019** -- `hash`: type ID + offline wordlist check; CLI + TUI + tests
 
 ### Report, workspace, quality
 
