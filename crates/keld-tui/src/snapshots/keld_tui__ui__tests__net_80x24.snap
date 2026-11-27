@@ -1,0 +1,28 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
+┌ Nav ─┐┌ Net ─────────────────────────────────────────────────────────────────┐
+│ Dash ││>Target [10.0.0.0/30]   Ports [80,443]                                │
+│ Scan ││ Conc [64]   Timeout [1000]  [ ] dry-run  tech:auto  state:idle       │
+│ Prob ││Ifaces (1): lo=127.0.0.1/8                                            │
+│ TLS  ││Enter edit  Tab fields  s start  p dry-run  t technique  i refresh    │
+│ HTTP ││ARP unavailable. Using TCP connect.                                   │
+│ Fuzz ││Progress ######################## 100%  discovering                   │
+│ DNS  ││                                                                      │
+│*Net  ││ Method   Target             Detail                                   │
+│ Hash ││> iface    127.0.0.1/8        lo loopback                             │
+│ Rpt  ││ tcp      10.0.0.1           tcp/80 open                              │
+│ Ws   ││                                                                      │
+│ Jobs ││Detail: [iface] 127.0.0.1/8 -- lo loopback                            │
+│ Aud  ││                                                                      │
+│ Set  ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+└──────┘└──────────────────────────────────────────────────────────────────────┘
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  m sidebar  s start

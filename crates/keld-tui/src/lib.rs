@@ -8,6 +8,7 @@ pub mod fuzz_view;
 pub mod http_view;
 pub mod keys;
 pub mod logo;
+pub mod net_view;
 pub mod probe_view;
 pub mod run;
 pub mod scan_view;

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `keld net`: list local interfaces (`if-addrs`); authorized CIDR/IP host discovery with Auto cascade ARP (capability reported; link-layer send not injected) -> ICMP (raw socket when permitted) -> TCP connect probe ports; max 1024 hosts; scope-gated; audit logged; `--technique` / `--ports` / `--dry-run` / `--json`; `keld doctor` reports icmp/arp; TUI Net screen (`s`/`p`/`t`/`i`)
 - `keld dns`: record enumeration (A/AAAA/MX/NS/TXT/CNAME/SOA), AXFR check against NS, optional wordlist subdomain brute, Certificate Transparency via crt.sh (`--ct` / `--no-ct`); scope-gated; audit logged; `--dry-run` / `--json` / `--rate` / `--concurrency`; TUI DNS screen with form, progress, and findings table (hickory-resolver + rustls HTTP)
 - `keld fuzz`: directory and virtual-host discovery from wordlists; status/size filters; scope-gated; audit logged; `--dry-run` / `--json` / `--rate` / `--concurrency`; TUI Fuzz screen with form, progress, and hits table (reqwest + rustls)
 - `keld http`: security headers, cookie flags, CORS (GET + OPTIONS probe), tech fingerprint hints, robots.txt and sitemap.xml; scope-gated; audit logged; `--dry-run` / `--json` / `--rate` / `--concurrency`; TUI HTTP screen with findings table (reqwest + rustls)

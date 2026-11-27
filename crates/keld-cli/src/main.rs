@@ -5,6 +5,7 @@ mod dns_cmd;
 mod doctor;
 mod fuzz_cmd;
 mod http_cmd;
+mod net_cmd;
 mod output;
 mod probe_cmd;
 mod scan_cmd;
@@ -23,7 +24,7 @@ use keld_core::{
 };
 use keld_modules::{
     DEFAULT_DNS_TIMEOUT_MS, DEFAULT_FUZZ_TIMEOUT_MS, DEFAULT_HTTP_TIMEOUT_MS,
-    DEFAULT_PROBE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, DEFAULT_TLS_TIMEOUT_MS,
+    DEFAULT_NET_TIMEOUT_MS, DEFAULT_PROBE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, DEFAULT_TLS_TIMEOUT_MS,
 };
 use keld_tui::{run, version_banner, ThemeId, TuiOptions};
 
@@ -178,6 +179,20 @@ enum Commands {
         no_ct: bool,
         /// Lookup / HTTP timeout in milliseconds
         #[arg(long, default_value_t = DEFAULT_DNS_TIMEOUT_MS)]
+        timeout: u64,
+    },
+    /// Local interfaces and authorized subnet host discovery
+    Net {
+        /// CIDR or IP in scope (omit to list interfaces only)
+        target: Option<String>,
+        /// Discovery technique: `auto`, `arp`, `icmp`, or `tcp` (default: auto)
+        #[arg(long, default_value = "auto")]
+        technique: String,
+        /// TCP probe ports when ARP/ICMP are unavailable (default: 80,443,22,445)
+        #[arg(short, long, default_value = "80,443,22,445")]
+        ports: String,
+        /// Connect / ICMP timeout in milliseconds
+        #[arg(long, default_value_t = DEFAULT_NET_TIMEOUT_MS)]
         timeout: u64,
     },
 }
@@ -387,6 +402,31 @@ fn main() -> Result<ExitCode> {
             .map_err(|e| anyhow::anyhow!(e))?;
             Ok(ExitCode::from(code))
         }
+        Some(Commands::Net {
+            target,
+            technique,
+            ports,
+            timeout,
+        }) => {
+            let mut audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
+            let code = net_cmd::run(
+                net_cmd::NetArgs {
+                    target,
+                    technique,
+                    ports,
+                    timeout_ms: timeout,
+                    concurrency: cli.concurrency.unwrap_or(0),
+                    dry_run: cli.dry_run,
+                    rate: cli.rate,
+                    json: cli.json,
+                    color,
+                },
+                &scope,
+                &mut audit,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            Ok(ExitCode::from(code))
+        }
         None => {
             let audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
 
@@ -436,8 +476,50 @@ mod tests {
         assert!(help.contains("http") || help.contains("Http") || help.contains("HTTP"));
         assert!(help.contains("fuzz") || help.contains("Fuzz"));
         assert!(help.contains("dns") || help.contains("Dns") || help.contains("DNS"));
+        assert!(help.contains("net") || help.contains("Net"));
         assert!(help.contains("--json"));
         assert!(help.contains("--dry-run"));
+    }
+
+    #[test]
+    fn parses_net_target() {
+        let cli = Cli::try_parse_from([
+            "keld",
+            "--dry-run",
+            "net",
+            "10.0.0.0/30",
+            "--technique",
+            "tcp",
+            "-p",
+            "80,443",
+            "--timeout",
+            "500",
+        ])
+        .unwrap();
+        assert!(cli.dry_run);
+        match cli.command {
+            Some(Commands::Net {
+                target,
+                technique,
+                ports,
+                timeout,
+            }) => {
+                assert_eq!(target.as_deref(), Some("10.0.0.0/30"));
+                assert_eq!(technique, "tcp");
+                assert_eq!(ports, "80,443");
+                assert_eq!(timeout, 500);
+            }
+            other => panic!("expected Net, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_net_ifaces_only() {
+        let cli = Cli::try_parse_from(["keld", "net"]).unwrap();
+        match cli.command {
+            Some(Commands::Net { target, .. }) => assert!(target.is_none()),
+            other => panic!("expected Net, got {other:?}"),
+        }
     }
 
     #[test]

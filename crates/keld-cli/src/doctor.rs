@@ -3,7 +3,7 @@
 use std::io::{self, IsTerminal};
 use std::net::UdpSocket;
 
-use keld_modules::SynAvailability;
+use keld_modules::{DiscoverAvailability, SynAvailability};
 use serde::Serialize;
 
 use crate::color::ColorMode;
@@ -36,6 +36,7 @@ pub struct DoctorContext {
 impl DoctorContext {
     pub fn run(&self) -> DoctorReport {
         let syn = SynAvailability::probe();
+        let discover = DiscoverAvailability::probe();
         DoctorReport {
             version: keld_core::VERSION.to_string(),
             checks: vec![
@@ -45,6 +46,8 @@ impl DoctorContext {
                 check_elevated(&syn),
                 check_npcap(&syn),
                 check_syn(&syn),
+                check_icmp(&discover),
+                check_arp(&discover),
                 check_network(),
                 check_scope(self.scope_loaded, &self.scope_summary),
             ],
@@ -140,6 +143,36 @@ fn check_syn(syn: &SynAvailability) -> DoctorCheck {
     }
 }
 
+fn check_icmp(discover: &DiscoverAvailability) -> DoctorCheck {
+    DoctorCheck {
+        id: "icmp",
+        ok: discover.icmp_usable,
+        detail: if discover.icmp_usable {
+            format!("ICMP path available: {}", discover.icmp_detail)
+        } else {
+            format!(
+                "{}. Net discovery will use TCP connect",
+                discover.icmp_detail
+            )
+        },
+    }
+}
+
+fn check_arp(discover: &DiscoverAvailability) -> DoctorCheck {
+    DoctorCheck {
+        id: "arp",
+        ok: discover.arp_usable,
+        detail: if discover.arp_usable {
+            format!("ARP path available: {}", discover.arp_detail)
+        } else {
+            format!(
+                "{}. Net discovery falls back to ICMP/TCP",
+                discover.arp_detail
+            )
+        },
+    }
+}
+
 fn check_network() -> DoctorCheck {
     match UdpSocket::bind(("127.0.0.1", 0)) {
         Ok(_) => DoctorCheck {
@@ -189,7 +222,9 @@ pub fn emit(report: &DoctorReport, json: bool, color: ColorMode) -> Result<(), S
     println!();
     println!(
         "{}",
-        color.dim("SYN is optional. When it is unavailable, scan uses TCP connect.")
+        color.dim(
+            "SYN is optional. When it is unavailable, scan uses TCP connect. Net discovery uses ARP/ICMP when available, else TCP."
+        )
     );
     Ok(())
 }
@@ -210,7 +245,10 @@ mod tests {
         let ids: Vec<_> = report.checks.iter().map(|c| c.id).collect();
         assert_eq!(
             ids,
-            ["tty", "color", "unicode", "elevated", "npcap", "syn", "network", "scope"]
+            [
+                "tty", "color", "unicode", "elevated", "npcap", "syn", "icmp", "arp", "network",
+                "scope"
+            ]
         );
         assert!(!report.version.is_empty());
         let elevated = report.checks.iter().find(|c| c.id == "elevated").unwrap();

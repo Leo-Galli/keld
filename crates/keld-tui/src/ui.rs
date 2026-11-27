@@ -12,6 +12,7 @@ use crate::dns_view::DnsField;
 use crate::fuzz_view::FuzzField;
 use crate::http_view::HttpField;
 use crate::logo::{self, WORDMARK};
+use crate::net_view::NetField;
 use crate::probe_view::ProbeField;
 use crate::scan_view::ScanField;
 use crate::screen::Screen;
@@ -314,6 +315,7 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, fo
         Screen::Http => draw_http(frame, area, app, focused),
         Screen::Fuzz => draw_fuzz(frame, area, app, focused),
         Screen::Dns => draw_dns(frame, area, app, focused),
+        Screen::Net => draw_net(frame, area, app, focused),
         _ => {
             let title = format!(" {} ", app.screen.title());
             frame.render_widget(
@@ -887,6 +889,175 @@ fn draw_dns(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
         Paragraph::new(lines)
             .style(app.theme.text_style())
             .block(panel_block(app, " DNS ", focused)),
+        area,
+    );
+}
+
+fn draw_net(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
+    let net = &app.net;
+    let dry = if net.dry_run { "x" } else { " " };
+    let state = match net.run_state {
+        crate::net_view::NetRunState::Idle => "idle",
+        crate::net_view::NetRunState::Running => "running",
+        crate::net_view::NetRunState::Done => "done",
+        crate::net_view::NetRunState::Failed => "failed",
+    };
+    let bar_w = (area.width.saturating_sub(28) as usize).clamp(8, 24);
+    let frac = net.progress_fraction().unwrap_or(0.0);
+    let filled = ((frac * bar_w as f64).round() as usize).min(bar_w);
+    let bar = if app.ascii {
+        format!("{}{}", "#".repeat(filled), "-".repeat(bar_w - filled))
+    } else {
+        format!("{}{}", "█".repeat(filled), "░".repeat(bar_w - filled))
+    };
+
+    let iface_preview: String = net
+        .interfaces
+        .iter()
+        .take(3)
+        .map(|i| {
+            let prefix = i.prefix.map(|p| format!("/{p}")).unwrap_or_default();
+            format!("{}={}{}", i.name, i.addr, prefix)
+        })
+        .collect::<Vec<_>>()
+        .join("  ");
+
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(Span::styled(
+            format!(
+                "{}  {}",
+                field_label(
+                    net.field == NetField::Target,
+                    "Target",
+                    &net.target,
+                    net.editing,
+                ),
+                field_label(
+                    net.field == NetField::Ports,
+                    "Ports",
+                    &net.ports,
+                    net.editing,
+                ),
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "{}  {}  [{}] dry-run  tech:{}  state:{}",
+                field_label(
+                    net.field == NetField::Concurrency,
+                    "Conc",
+                    &net.concurrency,
+                    net.editing
+                ),
+                field_label(
+                    net.field == NetField::Timeout,
+                    "Timeout",
+                    &net.timeout_ms,
+                    net.editing
+                ),
+                dry,
+                net.technique.as_str(),
+                state
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "Ifaces ({}): {}",
+                net.interfaces.len(),
+                if iface_preview.is_empty() {
+                    "(none)".into()
+                } else {
+                    iface_preview
+                }
+            ),
+            app.theme.muted_style(),
+        )),
+        Line::from(Span::styled(
+            "Enter edit  Tab fields  s start  p dry-run  t technique  i refresh",
+            app.theme.muted_style(),
+        )),
+        Line::from(Span::styled(
+            format!("Progress {} {}  {}", bar, net.progress_label(), net.message),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!(" {:<8} {:<18} {}", "Method", "Target", "Detail"),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    if let Some(note) = &net.fallback_note {
+        lines.insert(
+            4,
+            Line::from(Span::styled(
+                truncate(note, area.width.saturating_sub(4) as usize, app.ascii),
+                app.theme.muted_style(),
+            )),
+        );
+    }
+
+    if net.results.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "(no findings yet)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let header_rows = 8u16;
+        let inner_h = area.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(header_rows + 2) as usize;
+        let selected = net.selected.min(net.results.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, hit) in net
+            .results
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(visible.max(1))
+        {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let target: String = hit.target.chars().take(18).collect();
+            let detail: String = hit.detail.chars().take(36).collect();
+            let row = format!(
+                "{marker}{:<8} {:<18} {detail}",
+                hit.method.as_str().chars().take(8).collect::<String>(),
+                target
+            );
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(row, style)));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("Detail: {}", net.detail_line()),
+        app.theme.muted_style(),
+    )));
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(app.theme.text_style())
+            .block(panel_block(app, " Net ", focused)),
         area,
     );
 }
@@ -1514,6 +1685,8 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Screen::Fuzz => format!("  s start  p dry-run  {list_hint} select"),
         Screen::Dns if app.dns.editing => "  Enter done  Tab fields".to_string(),
         Screen::Dns => format!("  s start  p dry-run  c ct  {list_hint} select"),
+        Screen::Net if app.net.editing => "  Enter done  Tab fields".to_string(),
+        Screen::Net => format!("  s start  p dry-run  t tech  i ifaces  {list_hint} select"),
         _ => String::new(),
     };
     let text = format!(
@@ -2032,6 +2205,46 @@ mod tests {
         assert!(shot.contains("example.test"));
         assert!(shot.contains("AXFR") || shot.contains("axfr") || shot.contains("record"));
         assert_snapshot!("dns_80x24", shot);
+    }
+
+    #[test]
+    fn net_snapshot_80x24() {
+        use keld_modules::{DiscoverMethod, NetHit};
+        use std::net::{IpAddr, Ipv4Addr};
+        let mut app = shell_app();
+        app.screen = Screen::Net;
+        app.focus = FocusPane::Main;
+        app.net.target = "10.0.0.0/30".into();
+        app.net.ports = "80,443".into();
+        app.net.fallback_note = Some("ARP unavailable. Using TCP connect.".into());
+        app.net.interfaces = vec![keld_modules::InterfaceInfo {
+            name: "lo".into(),
+            addr: IpAddr::V4(Ipv4Addr::LOCALHOST),
+            prefix: Some(8),
+            is_loopback: true,
+        }];
+        app.net.results = vec![
+            NetHit {
+                method: DiscoverMethod::Interface,
+                target: "127.0.0.1/8".into(),
+                detail: "lo loopback".into(),
+                planned: false,
+            },
+            NetHit {
+                method: DiscoverMethod::Tcp,
+                target: "10.0.0.1".into(),
+                detail: "tcp/80 open".into(),
+                planned: false,
+            },
+        ];
+        app.net.done = 2;
+        app.net.total = 2;
+        app.net.message = "discovering".into();
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Net"));
+        assert!(shot.contains("10.0.0.0/30") || shot.contains("10.0.0.1"));
+        assert!(shot.contains("tcp") || shot.contains("iface"));
+        assert_snapshot!("net_80x24", shot);
     }
 
     #[test]
