@@ -10,6 +10,7 @@ use crate::dns_view::{DnsRunState, DnsView};
 use crate::fuzz_view::{FuzzRunState, FuzzView};
 use crate::http_view::{HttpRunState, HttpView};
 use crate::keys::KeyPreset;
+use crate::net_view::{NetRunState, NetView};
 use crate::probe_view::{ProbeRunState, ProbeView};
 use crate::scan_view::{ScanRunState, ScanView};
 use crate::screen::Screen;
@@ -143,6 +144,8 @@ pub struct App {
     pub fuzz: FuzzView,
     /// DNS module form + findings.
     pub dns: DnsView,
+    /// Net module form + findings.
+    pub net: NetView,
     /// Tick accumulator so job elapsed advances ~1s even at 30 FPS.
     tick_accum: u32,
 }
@@ -192,6 +195,7 @@ impl App {
             http: HttpView::default(),
             fuzz: FuzzView::default(),
             dns: DnsView::default(),
+            net: NetView::default(),
             tick_accum: 0,
         }
     }
@@ -207,6 +211,7 @@ impl App {
         self.http.poll();
         self.fuzz.poll();
         self.dns.poll();
+        self.net.poll();
         // ~30 FPS tick; advance job clocks once per ~30 ticks (~1s).
         self.tick_accum = self.tick_accum.saturating_add(1);
         if self.tick_accum < 30 {
@@ -282,6 +287,17 @@ impl App {
         }
     }
 
+    pub fn start_net(&mut self) {
+        match self.net.start(&self.scope) {
+            Ok(()) => {}
+            Err(e) => {
+                self.net.error = Some(e.clone());
+                self.net.message = e;
+                self.net.run_state = NetRunState::Failed;
+            }
+        }
+    }
+
     pub fn toggle_scan_dry_run(&mut self) {
         self.scan.dry_run = !self.scan.dry_run;
     }
@@ -308,6 +324,18 @@ impl App {
 
     pub fn toggle_dns_ct(&mut self) {
         self.dns.ct = !self.dns.ct;
+    }
+
+    pub fn toggle_net_dry_run(&mut self) {
+        self.net.dry_run = !self.net.dry_run;
+    }
+
+    pub fn cycle_net_technique(&mut self) {
+        self.net.cycle_technique();
+    }
+
+    pub fn refresh_net_interfaces(&mut self) {
+        self.net.refresh_interfaces();
     }
 
     pub fn toggle_scan_syn(&mut self) {
@@ -360,6 +388,14 @@ impl App {
 
     pub fn dns_prev_field(&mut self) {
         self.dns.field = self.dns.field.prev();
+    }
+
+    pub fn net_next_field(&mut self) {
+        self.net.field = self.net.field.next();
+    }
+
+    pub fn net_prev_field(&mut self) {
+        self.net.field = self.net.field.prev();
     }
 
     pub fn job_select_next(&mut self) {
@@ -755,6 +791,19 @@ impl App {
             return;
         }
 
+        if self.net.editing && self.screen == Screen::Net {
+            match key {
+                KeyAction::Quit | KeyAction::CloseOverlay => self.net.editing = false,
+                KeyAction::Activate | KeyAction::EndFilter => self.net.editing = false,
+                KeyAction::FilterBackspace => self.net.field_backspace(),
+                KeyAction::FilterChar(c) => self.net.field_push(c),
+                KeyAction::NextFocus => self.net_next_field(),
+                KeyAction::PrevFocus => self.net_prev_field(),
+                _ => {}
+            }
+            return;
+        }
+
         if !matches!(key, KeyAction::ChordG) {
             self.pending_g = false;
         }
@@ -787,6 +836,8 @@ impl App {
                     self.fuzz_next_field();
                 } else if self.screen == Screen::Dns && self.focus == FocusPane::Main {
                     self.dns_next_field();
+                } else if self.screen == Screen::Net && self.focus == FocusPane::Main {
+                    self.net_next_field();
                 } else {
                     self.cycle_focus(true);
                 }
@@ -804,6 +855,8 @@ impl App {
                     self.fuzz_prev_field();
                 } else if self.screen == Screen::Dns && self.focus == FocusPane::Main {
                     self.dns_prev_field();
+                } else if self.screen == Screen::Net && self.focus == FocusPane::Main {
+                    self.net_prev_field();
                 } else {
                     self.cycle_focus(false);
                 }
@@ -818,6 +871,7 @@ impl App {
             KeyAction::ScanStart if self.screen == Screen::Http => self.start_http(),
             KeyAction::ScanStart if self.screen == Screen::Fuzz => self.start_fuzz(),
             KeyAction::ScanStart if self.screen == Screen::Dns => self.start_dns(),
+            KeyAction::ScanStart if self.screen == Screen::Net => self.start_net(),
             KeyAction::ScanToggleDryRun if self.screen == Screen::Scan => {
                 self.toggle_scan_dry_run();
             }
@@ -836,11 +890,20 @@ impl App {
             KeyAction::ScanToggleDryRun if self.screen == Screen::Dns => {
                 self.toggle_dns_dry_run();
             }
+            KeyAction::ScanToggleDryRun if self.screen == Screen::Net => {
+                self.toggle_net_dry_run();
+            }
             KeyAction::ScanToggleSyn if self.screen == Screen::Scan => {
                 self.toggle_scan_syn();
             }
             KeyAction::DnsToggleCt if self.screen == Screen::Dns => {
                 self.toggle_dns_ct();
+            }
+            KeyAction::NetCycleTechnique if self.screen == Screen::Net => {
+                self.cycle_net_technique();
+            }
+            KeyAction::NetRefreshIfaces if self.screen == Screen::Net => {
+                self.refresh_net_interfaces();
             }
             KeyAction::Activate if self.screen == Screen::Scan && self.focus == FocusPane::Main => {
                 self.scan.editing = true;
@@ -861,6 +924,9 @@ impl App {
             }
             KeyAction::Activate if self.screen == Screen::Dns && self.focus == FocusPane::Main => {
                 self.dns.editing = true;
+            }
+            KeyAction::Activate if self.screen == Screen::Net && self.focus == FocusPane::Main => {
+                self.net.editing = true;
             }
             KeyAction::ListNext if self.audit_list_nav() => self.audit_select_next(),
             KeyAction::ListPrev if self.audit_list_nav() => self.audit_select_prev(),
@@ -884,6 +950,8 @@ impl App {
             KeyAction::ListPrev if self.fuzz_list_nav() => self.fuzz.select_prev(),
             KeyAction::ListNext if self.dns_list_nav() => self.dns.select_next(),
             KeyAction::ListPrev if self.dns_list_nav() => self.dns.select_prev(),
+            KeyAction::ListNext if self.net_list_nav() => self.net.select_next(),
+            KeyAction::ListPrev if self.net_list_nav() => self.net.select_prev(),
             KeyAction::ChordG if self.key_preset == KeyPreset::Vim => {
                 if self.pending_g {
                     if self.audit_list_nav() {
@@ -914,7 +982,9 @@ impl App {
             | KeyAction::ScanStart
             | KeyAction::ScanToggleDryRun
             | KeyAction::ScanToggleSyn
-            | KeyAction::DnsToggleCt => {}
+            | KeyAction::DnsToggleCt
+            | KeyAction::NetCycleTechnique
+            | KeyAction::NetRefreshIfaces => {}
         }
     }
 
@@ -949,6 +1019,10 @@ impl App {
     fn dns_list_nav(&self) -> bool {
         self.screen == Screen::Dns && self.focus == FocusPane::Main && !self.dns.editing
     }
+
+    fn net_list_nav(&self) -> bool {
+        self.screen == Screen::Net && self.focus == FocusPane::Main && !self.net.editing
+    }
 }
 
 /// Normalized keys the shell understands.
@@ -982,6 +1056,8 @@ pub enum KeyAction {
     ScanToggleDryRun,
     ScanToggleSyn,
     DnsToggleCt,
+    NetCycleTechnique,
+    NetRefreshIfaces,
 }
 
 #[cfg(test)]

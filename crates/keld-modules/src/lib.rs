@@ -11,6 +11,7 @@ use keld_core::{EventSender, JobId, ModuleKind};
 pub mod dns;
 pub mod fuzz;
 pub mod http;
+pub mod net;
 pub mod ports;
 pub mod probe;
 pub mod scan;
@@ -31,6 +32,12 @@ pub use fuzz::{
 pub use http::{
     parse_http_summary, HttpConfig, HttpError, HttpFinding, HttpModule, HttpSeverity,
     DEFAULT_HTTP_CONCURRENCY, DEFAULT_HTTP_TIMEOUT_MS,
+};
+pub use net::{
+    decide_discover, expand_targets, list_interfaces, parse_net_summary, parse_probe_ports,
+    DiscoverAvailability, DiscoverDecision, DiscoverMethod, DiscoverTechnique, InterfaceInfo,
+    NetConfig, NetError, NetHit, NetModule, NetRunOpts, DEFAULT_NET_CONCURRENCY,
+    DEFAULT_NET_TIMEOUT_MS, DEFAULT_PROBE_PORTS, MAX_DISCOVERY_HOSTS,
 };
 pub use ports::{parse_ports, PortParseError, MAX_PORTS, TOP_100};
 pub use probe::{
@@ -62,9 +69,9 @@ pub trait Module: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 }
 
-/// Registered modules available to CLI/TUI wiring (stub + scan + probe + tls + http + fuzz + dns).
+/// Registered modules available to CLI/TUI wiring (stub + scan + probe + tls + http + fuzz + dns + net).
 pub fn module_count() -> usize {
-    7
+    8
 }
 
 /// Build the stub used for event-bus wiring tests and early UI demos.
@@ -78,8 +85,8 @@ mod tests {
     use keld_core::{EventBus, Job, JobState, ModuleEvent};
 
     #[test]
-    fn registry_lists_stub_scan_probe_tls_http_fuzz_and_dns() {
-        assert_eq!(module_count(), 7);
+    fn registry_lists_stub_scan_probe_tls_http_fuzz_dns_and_net() {
+        assert_eq!(module_count(), 8);
         assert_eq!(stub_module().kind(), ModuleKind::Stub);
         assert_eq!(
             ScanModule::new(
@@ -151,6 +158,25 @@ mod tests {
             )
             .kind(),
             ModuleKind::Dns
+        );
+        assert_eq!(
+            NetModule::new(
+                NetConfig::from_parts(
+                    Some("127.0.0.1".into()),
+                    DiscoverTechnique::Tcp,
+                    "80",
+                    NetRunOpts {
+                        timeout_ms: 100,
+                        concurrency: 1,
+                        dry_run: true,
+                        rate_per_sec: None,
+                    },
+                )
+                .unwrap(),
+                keld_core::Scope::empty(),
+            )
+            .kind(),
+            ModuleKind::Net
         );
     }
 
