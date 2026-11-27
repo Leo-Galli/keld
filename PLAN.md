@@ -58,7 +58,7 @@ Every active module requires a target scope (`scope.toml` or explicit targets). 
 - `Finding`: id, severity, module, target, title, evidence, timestamps
 - `Job`: id, module, state, progress, started/finished, counts
 - `AuditEntry`: timestamp, module, target, params, outcome
-- Workspace DB: SQLite file under `~/.keld/workspaces/<name>/`
+- Workspace DB: SQLite file `{data_dir}/keld/workspaces/<name>/workspace.sqlite` (override `KELD_WORKSPACES_DIR`); stores scope TOML, findings, audit entries
 
 ## CLI design
 

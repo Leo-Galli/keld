@@ -1,0 +1,28 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
+┌ Nav ─┐┌ Workspace ───────────────────────────────────────────────────────────┐
+│ Dash ││>Name [lab]   Scope [scope.toml]                                      │
+│ Scan ││ Findings [findings.json]  root:/tmp/keld-workspaces                  │
+│ Prob ││e edit  n create  Enter open  d delete  i scope  f findings  a audit  │
+│ TLS  ││1  1 workspace(s)                                                     │
+│ HTTP ││                                                                      │
+│ Fuzz ││ Name             Findings Audit    Scope                             │
+│ DNS  ││> lab              2        1        yes                              │
+│ Net  ││                                                                      │
+│ Hash ││Detail: 192.0.2.0/24  findings:2  audit:1                             │
+│ Rpt  ││                                                                      │
+│*Ws   ││                                                                      │
+│ Jobs ││                                                                      │
+│ Aud  ││                                                                      │
+│ Set  ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+└──────┘└──────────────────────────────────────────────────────────────────────┘
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  m sidebar  e edit  n

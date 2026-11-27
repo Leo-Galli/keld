@@ -19,6 +19,7 @@ use crate::report_view::ReportField;
 use crate::scan_view::ScanField;
 use crate::screen::Screen;
 use crate::tls_view::TlsField;
+use crate::workspace_view::WorkspaceField;
 
 const MIN_WIDTH: u16 = 60;
 const MIN_HEIGHT: u16 = 16;
@@ -320,6 +321,7 @@ fn draw_main(frame: &mut Frame<'_>, area: Rect, app: &App, single_pane: bool, fo
         Screen::Net => draw_net(frame, area, app, focused),
         Screen::Hash => draw_hash(frame, area, app, focused),
         Screen::Reports => draw_report(frame, area, app, focused),
+        Screen::Workspace => draw_workspace(frame, area, app, focused),
         _ => {
             let title = format!(" {} ", app.screen.title());
             frame.render_widget(
@@ -1202,6 +1204,122 @@ fn draw_hash(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
     );
 }
 
+fn draw_workspace(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
+    let ws = &app.workspace;
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(Span::styled(
+            format!(
+                "{}  {}",
+                field_label(
+                    ws.field == WorkspaceField::Name,
+                    "Name",
+                    &ws.name,
+                    ws.editing,
+                ),
+                field_label(
+                    ws.field == WorkspaceField::ScopeFile,
+                    "Scope",
+                    &ws.scope_file,
+                    ws.editing,
+                ),
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "{}  root:{}",
+                field_label(
+                    ws.field == WorkspaceField::FindingsFile,
+                    "Findings",
+                    &ws.findings_file,
+                    ws.editing,
+                ),
+                truncate(&ws.root.display().to_string(), 40, app.ascii),
+            ),
+            app.theme.text_style(),
+        )),
+        Line::from(Span::styled(
+            "e edit  n create  Enter open  d delete  i scope  f findings  a audit  r refresh",
+            app.theme.muted_style(),
+        )),
+        Line::from(Span::styled(
+            format!("{}  {}", ws.list.len(), ws.message),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!(
+                " {:<16} {:<8} {:<8} {}",
+                "Name", "Findings", "Audit", "Scope"
+            ),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    if ws.list.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "(no workspaces -- set Name and press n)",
+            app.theme.muted_style(),
+        )));
+    } else {
+        let header_rows = 6u16;
+        let inner_h = area.height.saturating_sub(2);
+        let visible = inner_h.saturating_sub(header_rows + 3) as usize;
+        let selected = ws.selected.min(ws.list.len() - 1);
+        let start = if visible == 0 || selected < visible {
+            0
+        } else {
+            selected + 1 - visible
+        };
+        for (i, row) in ws.list.iter().enumerate().skip(start).take(visible.max(1)) {
+            let marker = if i == selected {
+                app.symbols.selected_marker()
+            } else {
+                " ".into()
+            };
+            let scope = if row.has_scope { "yes" } else { "no" };
+            let text = format!(
+                "{marker}{:<16} {:<8} {:<8} {scope}",
+                truncate(&row.name, 16, app.ascii),
+                row.findings,
+                row.audit_entries,
+            );
+            let style = if i == selected {
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                app.theme.text_style()
+            };
+            lines.push(Line::from(Span::styled(text, style)));
+        }
+
+        lines.push(Line::from(""));
+        let detail = match &ws.detail {
+            Some(d) => format!(
+                "Detail: {}  findings:{}  audit:{}",
+                d.scope_summary, d.findings, d.audit_entries
+            ),
+            None => "Detail: (none)".into(),
+        };
+        lines.push(Line::from(Span::styled(
+            truncate(&detail, 72, app.ascii),
+            app.theme.muted_style(),
+        )));
+    }
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(app.theme.text_style())
+            .block(panel_block(app, " Workspace ", focused)),
+        area,
+    );
+}
+
 fn draw_report(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
     let report = &app.report;
     let state = match report.run_state {
@@ -1961,6 +2079,10 @@ fn draw_status(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Screen::Hash => format!("  s start  p dry-run  a algo  {list_hint} select"),
         Screen::Reports if app.report.editing => "  Enter done  Tab fields".to_string(),
         Screen::Reports => format!("  s export  l load  f format  {list_hint} select"),
+        Screen::Workspace if app.workspace.editing => "  Enter done  Tab fields".to_string(),
+        Screen::Workspace => {
+            format!("  e edit  n create  Enter open  d del  {list_hint} select")
+        }
         _ => String::new(),
     };
     let text = format!(
@@ -2566,6 +2688,36 @@ mod tests {
         assert!(shot.contains("html") || shot.contains("export"));
         assert!(shot.contains("HSTS") || shot.contains("tls") || shot.contains("high"));
         assert_snapshot!("report_80x24", shot);
+    }
+
+    #[test]
+    fn workspace_snapshot_80x24() {
+        use keld_core::WorkspaceInfo;
+        let mut app = shell_app();
+        app.screen = Screen::Workspace;
+        app.focus = FocusPane::Main;
+        app.workspace.root = std::path::PathBuf::from("/tmp/keld-workspaces");
+        app.workspace.name = "lab".into();
+        app.workspace.message = "1 workspace(s)".into();
+        app.workspace.list = vec![WorkspaceInfo {
+            name: "lab".into(),
+            path: std::path::PathBuf::from("/tmp/keld-workspaces/lab"),
+            findings: 2,
+            audit_entries: 1,
+            has_scope: true,
+        }];
+        app.workspace.selected = 0;
+        app.workspace.detail = Some(keld_core::WorkspaceStats {
+            findings: 2,
+            audit_entries: 1,
+            has_scope: true,
+            scope_summary: "192.0.2.0/24".into(),
+        });
+        let shot = render(&app, 80, 24);
+        assert!(shot.contains("Workspace"));
+        assert!(shot.contains("lab"));
+        assert!(shot.contains("create") || shot.contains("open"));
+        assert_snapshot!("workspace_80x24", shot);
     }
 
     #[test]

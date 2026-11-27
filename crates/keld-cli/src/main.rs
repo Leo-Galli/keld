@@ -13,6 +13,7 @@ mod report_cmd;
 mod scan_cmd;
 mod signal;
 mod tls_cmd;
+mod workspace_cmd;
 
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
@@ -222,6 +223,54 @@ enum Commands {
         /// Optional report title
         #[arg(long)]
         title: Option<String>,
+    },
+    /// Local SQLite projects (scope, findings, audit)
+    Workspace {
+        #[command(subcommand)]
+        action: WorkspaceCmd,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum WorkspaceCmd {
+    /// List workspaces under the data directory
+    List,
+    /// Create an empty workspace
+    Create {
+        /// Workspace name (letters, digits, `_`, `-`)
+        name: String,
+    },
+    /// Show workspace path and counts
+    Show { name: String },
+    /// Delete a workspace directory
+    Delete { name: String },
+    /// Store scope.toml into the workspace
+    SetScope {
+        name: String,
+        /// Scope file (default: ./scope.toml)
+        #[arg(short, long, value_name = "PATH")]
+        file: Option<PathBuf>,
+    },
+    /// Import findings JSON into the workspace
+    ImportFindings {
+        name: String,
+        /// Findings JSON file(s)
+        #[arg(short, long = "input", value_name = "PATH", required = true)]
+        inputs: Vec<PathBuf>,
+    },
+    /// Export workspace findings as JSON
+    ExportFindings {
+        name: String,
+        /// Write to this path (default: stdout)
+        #[arg(short, long, value_name = "PATH")]
+        output: Option<PathBuf>,
+    },
+    /// Import audit JSONL into the workspace
+    ImportAudit {
+        name: String,
+        /// Audit JSONL (default: ./audit.jsonl or user data dir)
+        #[arg(short, long, value_name = "PATH")]
+        file: Option<PathBuf>,
     },
 }
 
@@ -499,6 +548,82 @@ fn main() -> Result<ExitCode> {
             .map_err(|e| anyhow::anyhow!(e))?;
             Ok(ExitCode::from(code))
         }
+        Some(Commands::Workspace { action }) => {
+            let mut audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
+            let (wa, name, file, inputs, output) = match action {
+                WorkspaceCmd::List => (
+                    workspace_cmd::WorkspaceAction::List,
+                    None,
+                    None,
+                    vec![],
+                    None,
+                ),
+                WorkspaceCmd::Create { name } => (
+                    workspace_cmd::WorkspaceAction::Create,
+                    Some(name),
+                    None,
+                    vec![],
+                    None,
+                ),
+                WorkspaceCmd::Show { name } => (
+                    workspace_cmd::WorkspaceAction::Show,
+                    Some(name),
+                    None,
+                    vec![],
+                    None,
+                ),
+                WorkspaceCmd::Delete { name } => (
+                    workspace_cmd::WorkspaceAction::Delete,
+                    Some(name),
+                    None,
+                    vec![],
+                    None,
+                ),
+                WorkspaceCmd::SetScope { name, file } => (
+                    workspace_cmd::WorkspaceAction::SetScope,
+                    Some(name),
+                    file,
+                    vec![],
+                    None,
+                ),
+                WorkspaceCmd::ImportFindings { name, inputs } => (
+                    workspace_cmd::WorkspaceAction::ImportFindings,
+                    Some(name),
+                    None,
+                    inputs,
+                    None,
+                ),
+                WorkspaceCmd::ExportFindings { name, output } => (
+                    workspace_cmd::WorkspaceAction::ExportFindings,
+                    Some(name),
+                    None,
+                    vec![],
+                    output,
+                ),
+                WorkspaceCmd::ImportAudit { name, file } => (
+                    workspace_cmd::WorkspaceAction::ImportAudit,
+                    Some(name),
+                    file,
+                    vec![],
+                    None,
+                ),
+            };
+            let code = workspace_cmd::run(
+                workspace_cmd::WorkspaceArgs {
+                    action: wa,
+                    name,
+                    file,
+                    inputs,
+                    output,
+                    dry_run: cli.dry_run,
+                    json: cli.json,
+                    color,
+                },
+                &mut audit,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            Ok(ExitCode::from(code))
+        }
         None => {
             let audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
 
@@ -551,8 +676,20 @@ mod tests {
         assert!(help.contains("net") || help.contains("Net"));
         assert!(help.contains("hash") || help.contains("Hash"));
         assert!(help.contains("report") || help.contains("Report"));
+        assert!(help.contains("workspace") || help.contains("Workspace"));
         assert!(help.contains("--json"));
         assert!(help.contains("--dry-run"));
+    }
+
+    #[test]
+    fn parses_workspace_create() {
+        let cli = Cli::try_parse_from(["keld", "workspace", "create", "lab-1"]).unwrap();
+        match cli.command {
+            Some(Commands::Workspace {
+                action: WorkspaceCmd::Create { name },
+            }) => assert_eq!(name, "lab-1"),
+            other => panic!("expected Workspace::Create, got {other:?}"),
+        }
     }
 
     #[test]

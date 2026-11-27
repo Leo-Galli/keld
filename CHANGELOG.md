@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `keld workspace`: local SQLite projects under `{data_dir}/keld/workspaces/<name>/` (override `KELD_WORKSPACES_DIR`); store scope, findings, audit; CLI `list` / `create` / `show` / `delete` / `set-scope` / `import-findings` / `export-findings` / `import-audit`; TUI Workspace screen (`e` edit, `n` create, Enter open, `d` delete, `i`/`f`/`a` import, `r` refresh)
 - `keld report`: merge findings JSON into JSON / Markdown / self-contained HTML (KELD logo) / CSV / SARIF 2.1.0; `-i` inputs, `-f` format, `-o` output, `--title`; `--dry-run` / `--json`; audit logged; TUI Reports screen (`s` export / `l` load / `f` format)
 - Shared `Finding` / `Severity` model in `keld-core`
 - `keld hash`: identify MD5/SHA-1/SHA-2 hex digests and `$1$`/`$5$`/`$6$`/`$2a$` modular crypt prefixes; offline wordlist check for hex digests (md-5/sha1/sha2); no network / no scope gate; audit logged; `--algo` / `-w` / `--dry-run` / `--json`; TUI Hash screen (`s`/`p`/`a`)

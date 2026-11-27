@@ -19,6 +19,7 @@ use crate::screen::Screen;
 use crate::symbols::Symbols;
 use crate::theme::{Theme, ThemeId};
 use crate::tls_view::{TlsRunState, TlsView};
+use crate::workspace_view::WorkspaceView;
 
 /// Runtime options shared with the CLI.
 #[derive(Debug, Clone)]
@@ -152,6 +153,8 @@ pub struct App {
     pub hash: HashView,
     /// Reports export form + findings preview.
     pub report: ReportView,
+    /// Workspace list / activate form.
+    pub workspace: WorkspaceView,
     /// Tick accumulator so job elapsed advances ~1s even at 30 FPS.
     tick_accum: u32,
 }
@@ -207,6 +210,11 @@ impl App {
                 let mut r = ReportView::default();
                 r.ensure_preview();
                 r
+            },
+            workspace: {
+                let mut w = WorkspaceView::default();
+                w.refresh();
+                w
             },
             tick_accum: 0,
         }
@@ -378,6 +386,62 @@ impl App {
         self.report.cycle_format();
     }
 
+    pub fn workspace_create(&mut self) {
+        if let Err(e) = self.workspace.create() {
+            self.workspace.message = e;
+        }
+    }
+
+    pub fn workspace_delete(&mut self) {
+        if let Err(e) = self.workspace.delete_selected() {
+            self.workspace.message = e;
+        }
+    }
+
+    pub fn workspace_activate(&mut self) {
+        match self.workspace.activate_selected() {
+            Ok((name, scope, findings, audit)) => {
+                self.workspace_name = name;
+                self.scope_summary = scope.summary();
+                self.scope = scope;
+                if !findings.is_empty() {
+                    self.report.findings = findings;
+                    self.report.message = format!(
+                        "loaded {} finding(s) from workspace",
+                        self.report.findings.len()
+                    );
+                }
+                if !audit.is_empty() {
+                    self.audit_entries = audit;
+                    self.clamp_audit_selection();
+                }
+            }
+            Err(e) => self.workspace.message = e,
+        }
+    }
+
+    pub fn workspace_import_scope(&mut self) {
+        if let Err(e) = self.workspace.import_scope_selected() {
+            self.workspace.message = e;
+        }
+    }
+
+    pub fn workspace_import_findings(&mut self) {
+        if let Err(e) = self.workspace.import_findings_selected() {
+            self.workspace.message = e;
+        }
+    }
+
+    pub fn workspace_import_audit(&mut self) {
+        if let Err(e) = self.workspace.import_audit_selected() {
+            self.workspace.message = e;
+        }
+    }
+
+    pub fn workspace_refresh(&mut self) {
+        self.workspace.refresh();
+    }
+
     pub fn refresh_net_interfaces(&mut self) {
         self.net.refresh_interfaces();
     }
@@ -456,6 +520,14 @@ impl App {
 
     pub fn report_prev_field(&mut self) {
         self.report.field = self.report.field.prev();
+    }
+
+    pub fn workspace_next_field(&mut self) {
+        self.workspace.next_field();
+    }
+
+    pub fn workspace_prev_field(&mut self) {
+        self.workspace.prev_field();
     }
 
     pub fn job_select_next(&mut self) {
@@ -890,6 +962,19 @@ impl App {
             return;
         }
 
+        if self.workspace.editing && self.screen == Screen::Workspace {
+            match key {
+                KeyAction::Quit | KeyAction::CloseOverlay => self.workspace.editing = false,
+                KeyAction::Activate | KeyAction::EndFilter => self.workspace.editing = false,
+                KeyAction::FilterBackspace => self.workspace.field_backspace(),
+                KeyAction::FilterChar(c) => self.workspace.field_push(c),
+                KeyAction::NextFocus => self.workspace_next_field(),
+                KeyAction::PrevFocus => self.workspace_prev_field(),
+                _ => {}
+            }
+            return;
+        }
+
         if !matches!(key, KeyAction::ChordG) {
             self.pending_g = false;
         }
@@ -928,6 +1013,8 @@ impl App {
                     self.hash_next_field();
                 } else if self.screen == Screen::Reports && self.focus == FocusPane::Main {
                     self.report_next_field();
+                } else if self.screen == Screen::Workspace && self.focus == FocusPane::Main {
+                    self.workspace_next_field();
                 } else {
                     self.cycle_focus(true);
                 }
@@ -951,6 +1038,8 @@ impl App {
                     self.hash_prev_field();
                 } else if self.screen == Screen::Reports && self.focus == FocusPane::Main {
                     self.report_prev_field();
+                } else if self.screen == Screen::Workspace && self.focus == FocusPane::Main {
+                    self.workspace_prev_field();
                 } else {
                     self.cycle_focus(false);
                 }
@@ -971,6 +1060,27 @@ impl App {
             KeyAction::ReportLoad if self.screen == Screen::Reports => self.report_load(),
             KeyAction::ReportCycleFormat if self.screen == Screen::Reports => {
                 self.report_cycle_format();
+            }
+            KeyAction::WorkspaceCreate if self.screen == Screen::Workspace => {
+                self.workspace_create();
+            }
+            KeyAction::WorkspaceDelete if self.screen == Screen::Workspace => {
+                self.workspace_delete();
+            }
+            KeyAction::WorkspaceImportScope if self.screen == Screen::Workspace => {
+                self.workspace_import_scope();
+            }
+            KeyAction::WorkspaceImportFindings if self.screen == Screen::Workspace => {
+                self.workspace_import_findings();
+            }
+            KeyAction::WorkspaceImportAudit if self.screen == Screen::Workspace => {
+                self.workspace_import_audit();
+            }
+            KeyAction::WorkspaceRefresh if self.screen == Screen::Workspace => {
+                self.workspace_refresh();
+            }
+            KeyAction::WorkspaceEdit if self.screen == Screen::Workspace => {
+                self.workspace.editing = true;
             }
             KeyAction::ScanToggleDryRun if self.screen == Screen::Scan => {
                 self.toggle_scan_dry_run();
@@ -1042,6 +1152,18 @@ impl App {
             {
                 self.report.editing = true;
             }
+            KeyAction::Activate
+                if self.screen == Screen::Workspace && self.focus == FocusPane::Main =>
+            {
+                // Enter on list activates; when editing fields, handled above.
+                if self.workspace.editing {
+                    self.workspace.editing = false;
+                } else if self.workspace.list.is_empty() {
+                    self.workspace.editing = true;
+                } else {
+                    self.workspace_activate();
+                }
+            }
             KeyAction::ListNext if self.audit_list_nav() => self.audit_select_next(),
             KeyAction::ListPrev if self.audit_list_nav() => self.audit_select_prev(),
             KeyAction::ListTop if self.audit_list_nav() => self.audit_select_first(),
@@ -1070,6 +1192,8 @@ impl App {
             KeyAction::ListPrev if self.hash_list_nav() => self.hash.select_prev(),
             KeyAction::ListNext if self.report_list_nav() => self.report.select_next(),
             KeyAction::ListPrev if self.report_list_nav() => self.report.select_prev(),
+            KeyAction::ListNext if self.workspace_list_nav() => self.workspace.select_next(),
+            KeyAction::ListPrev if self.workspace_list_nav() => self.workspace.select_prev(),
             KeyAction::ChordG if self.key_preset == KeyPreset::Vim => {
                 if self.pending_g {
                     if self.audit_list_nav() {
@@ -1105,7 +1229,14 @@ impl App {
             | KeyAction::NetRefreshIfaces
             | KeyAction::HashCycleAlgo
             | KeyAction::ReportLoad
-            | KeyAction::ReportCycleFormat => {}
+            | KeyAction::ReportCycleFormat
+            | KeyAction::WorkspaceCreate
+            | KeyAction::WorkspaceDelete
+            | KeyAction::WorkspaceImportScope
+            | KeyAction::WorkspaceImportFindings
+            | KeyAction::WorkspaceImportAudit
+            | KeyAction::WorkspaceRefresh
+            | KeyAction::WorkspaceEdit => {}
         }
     }
 
@@ -1152,6 +1283,10 @@ impl App {
     fn report_list_nav(&self) -> bool {
         self.screen == Screen::Reports && self.focus == FocusPane::Main && !self.report.editing
     }
+
+    fn workspace_list_nav(&self) -> bool {
+        self.screen == Screen::Workspace && self.focus == FocusPane::Main && !self.workspace.editing
+    }
 }
 
 /// Normalized keys the shell understands.
@@ -1190,6 +1325,13 @@ pub enum KeyAction {
     HashCycleAlgo,
     ReportLoad,
     ReportCycleFormat,
+    WorkspaceCreate,
+    WorkspaceDelete,
+    WorkspaceImportScope,
+    WorkspaceImportFindings,
+    WorkspaceImportAudit,
+    WorkspaceRefresh,
+    WorkspaceEdit,
 }
 
 #[cfg(test)]
