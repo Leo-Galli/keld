@@ -20,6 +20,7 @@ clap.workspace = true
 indicatif.workspace = true
 keld-core.workspace = true
 keld-modules.workspace = true
+keld-report.workspace = true
 keld-tui.workspace = true
 serde.workspace = true
 serde_json.workspace = true

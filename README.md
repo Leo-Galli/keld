@@ -82,6 +82,7 @@ Use only on systems you own or are explicitly authorized to test. Active modules
 | `q` / Esc | Back / close overlay |
 | `s` / `p` / `y` | Scan: start / dry-run / request SYN |
 | `s` / `p` / `t` / `i` | Net: start / dry-run / technique / refresh ifaces |
+| `s` / `l` / `f` | Reports: export / load findings / cycle format |
 | Ctrl+C | Quit (confirm if jobs running) |
 
 Vim and Arrows presets switch from the command palette (Settings persistence in KL-023). See [DESIGN.md](DESIGN.md).

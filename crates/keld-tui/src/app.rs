@@ -13,6 +13,7 @@ use crate::http_view::{HttpRunState, HttpView};
 use crate::keys::KeyPreset;
 use crate::net_view::{NetRunState, NetView};
 use crate::probe_view::{ProbeRunState, ProbeView};
+use crate::report_view::ReportView;
 use crate::scan_view::{ScanRunState, ScanView};
 use crate::screen::Screen;
 use crate::symbols::Symbols;
@@ -149,6 +150,8 @@ pub struct App {
     pub net: NetView,
     /// Hash module form + findings.
     pub hash: HashView,
+    /// Reports export form + findings preview.
+    pub report: ReportView,
     /// Tick accumulator so job elapsed advances ~1s even at 30 FPS.
     tick_accum: u32,
 }
@@ -200,6 +203,11 @@ impl App {
             dns: DnsView::default(),
             net: NetView::default(),
             hash: HashView::default(),
+            report: {
+                let mut r = ReportView::default();
+                r.ensure_preview();
+                r
+            },
             tick_accum: 0,
         }
     }
@@ -358,6 +366,18 @@ impl App {
         self.hash.cycle_algo();
     }
 
+    pub fn report_export(&mut self) {
+        self.report.export();
+    }
+
+    pub fn report_load(&mut self) {
+        self.report.load_input();
+    }
+
+    pub fn report_cycle_format(&mut self) {
+        self.report.cycle_format();
+    }
+
     pub fn refresh_net_interfaces(&mut self) {
         self.net.refresh_interfaces();
     }
@@ -428,6 +448,14 @@ impl App {
 
     pub fn hash_prev_field(&mut self) {
         self.hash.field = self.hash.field.prev();
+    }
+
+    pub fn report_next_field(&mut self) {
+        self.report.field = self.report.field.next();
+    }
+
+    pub fn report_prev_field(&mut self) {
+        self.report.field = self.report.field.prev();
     }
 
     pub fn job_select_next(&mut self) {
@@ -849,6 +877,19 @@ impl App {
             return;
         }
 
+        if self.report.editing && self.screen == Screen::Reports {
+            match key {
+                KeyAction::Quit | KeyAction::CloseOverlay => self.report.editing = false,
+                KeyAction::Activate | KeyAction::EndFilter => self.report.editing = false,
+                KeyAction::FilterBackspace => self.report.field_backspace(),
+                KeyAction::FilterChar(c) => self.report.field_push(c),
+                KeyAction::NextFocus => self.report_next_field(),
+                KeyAction::PrevFocus => self.report_prev_field(),
+                _ => {}
+            }
+            return;
+        }
+
         if !matches!(key, KeyAction::ChordG) {
             self.pending_g = false;
         }
@@ -885,6 +926,8 @@ impl App {
                     self.net_next_field();
                 } else if self.screen == Screen::Hash && self.focus == FocusPane::Main {
                     self.hash_next_field();
+                } else if self.screen == Screen::Reports && self.focus == FocusPane::Main {
+                    self.report_next_field();
                 } else {
                     self.cycle_focus(true);
                 }
@@ -906,6 +949,8 @@ impl App {
                     self.net_prev_field();
                 } else if self.screen == Screen::Hash && self.focus == FocusPane::Main {
                     self.hash_prev_field();
+                } else if self.screen == Screen::Reports && self.focus == FocusPane::Main {
+                    self.report_prev_field();
                 } else {
                     self.cycle_focus(false);
                 }
@@ -922,6 +967,11 @@ impl App {
             KeyAction::ScanStart if self.screen == Screen::Dns => self.start_dns(),
             KeyAction::ScanStart if self.screen == Screen::Net => self.start_net(),
             KeyAction::ScanStart if self.screen == Screen::Hash => self.start_hash(),
+            KeyAction::ScanStart if self.screen == Screen::Reports => self.report_export(),
+            KeyAction::ReportLoad if self.screen == Screen::Reports => self.report_load(),
+            KeyAction::ReportCycleFormat if self.screen == Screen::Reports => {
+                self.report_cycle_format();
+            }
             KeyAction::ScanToggleDryRun if self.screen == Screen::Scan => {
                 self.toggle_scan_dry_run();
             }
@@ -987,6 +1037,11 @@ impl App {
             KeyAction::Activate if self.screen == Screen::Hash && self.focus == FocusPane::Main => {
                 self.hash.editing = true;
             }
+            KeyAction::Activate
+                if self.screen == Screen::Reports && self.focus == FocusPane::Main =>
+            {
+                self.report.editing = true;
+            }
             KeyAction::ListNext if self.audit_list_nav() => self.audit_select_next(),
             KeyAction::ListPrev if self.audit_list_nav() => self.audit_select_prev(),
             KeyAction::ListTop if self.audit_list_nav() => self.audit_select_first(),
@@ -1013,6 +1068,8 @@ impl App {
             KeyAction::ListPrev if self.net_list_nav() => self.net.select_prev(),
             KeyAction::ListNext if self.hash_list_nav() => self.hash.select_next(),
             KeyAction::ListPrev if self.hash_list_nav() => self.hash.select_prev(),
+            KeyAction::ListNext if self.report_list_nav() => self.report.select_next(),
+            KeyAction::ListPrev if self.report_list_nav() => self.report.select_prev(),
             KeyAction::ChordG if self.key_preset == KeyPreset::Vim => {
                 if self.pending_g {
                     if self.audit_list_nav() {
@@ -1046,7 +1103,9 @@ impl App {
             | KeyAction::DnsToggleCt
             | KeyAction::NetCycleTechnique
             | KeyAction::NetRefreshIfaces
-            | KeyAction::HashCycleAlgo => {}
+            | KeyAction::HashCycleAlgo
+            | KeyAction::ReportLoad
+            | KeyAction::ReportCycleFormat => {}
         }
     }
 
@@ -1089,6 +1148,10 @@ impl App {
     fn hash_list_nav(&self) -> bool {
         self.screen == Screen::Hash && self.focus == FocusPane::Main && !self.hash.editing
     }
+
+    fn report_list_nav(&self) -> bool {
+        self.screen == Screen::Reports && self.focus == FocusPane::Main && !self.report.editing
+    }
 }
 
 /// Normalized keys the shell understands.
@@ -1125,6 +1188,8 @@ pub enum KeyAction {
     NetCycleTechnique,
     NetRefreshIfaces,
     HashCycleAlgo,
+    ReportLoad,
+    ReportCycleFormat,
 }
 
 #[cfg(test)]

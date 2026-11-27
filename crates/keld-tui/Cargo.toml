@@ -12,6 +12,7 @@ repository.workspace = true
 crossterm.workspace = true
 keld-core.workspace = true
 keld-modules.workspace = true
+keld-report.workspace = true
 ratatui.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

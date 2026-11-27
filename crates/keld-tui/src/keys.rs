@@ -53,6 +53,7 @@ const HELP_VIM: &[(&str, &str)] = &[
     ("s / p", "Probe / TLS / HTTP / Fuzz / DNS / Net / Hash"),
     ("t / i", "Net: technique / refresh ifaces"),
     ("a", "Hash: cycle algo"),
+    ("s / l / f", "Reports: export / load / format"),
 ];
 
 const HELP_ARROWS: &[(&str, &str)] = &[
@@ -75,6 +76,7 @@ const HELP_ARROWS: &[(&str, &str)] = &[
     ("s / p", "Probe / TLS / HTTP / Fuzz / DNS / Net / Hash"),
     ("t / i", "Net: technique / refresh ifaces"),
     ("a", "Hash: cycle algo"),
+    ("s / l / f", "Reports: export / load / format"),
 ];
 
 #[cfg(test)]
