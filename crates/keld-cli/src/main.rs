@@ -4,6 +4,7 @@ mod color;
 mod dns_cmd;
 mod doctor;
 mod fuzz_cmd;
+mod hash_cmd;
 mod http_cmd;
 mod net_cmd;
 mod output;
@@ -194,6 +195,17 @@ enum Commands {
         /// Connect / ICMP timeout in milliseconds
         #[arg(long, default_value_t = DEFAULT_NET_TIMEOUT_MS)]
         timeout: u64,
+    },
+    /// Hash type identification and offline wordlist check
+    Hash {
+        /// Operator-supplied hash (hex digest or `$…` modular crypt)
+        hash: String,
+        /// Optional wordlist for offline check (`#` comments skipped)
+        #[arg(short, long, value_name = "PATH")]
+        wordlist: Option<PathBuf>,
+        /// Force algo: `auto`, `md5`, `sha1`, `sha256`, `sha384`, `sha512` (default: auto)
+        #[arg(long, default_value = "auto")]
+        algo: String,
     },
 }
 
@@ -427,6 +439,28 @@ fn main() -> Result<ExitCode> {
             .map_err(|e| anyhow::anyhow!(e))?;
             Ok(ExitCode::from(code))
         }
+        Some(Commands::Hash {
+            hash,
+            wordlist,
+            algo,
+        }) => {
+            let mut audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
+            let code = hash_cmd::run(
+                hash_cmd::HashArgs {
+                    hash,
+                    wordlist,
+                    algo,
+                    concurrency: cli.concurrency.unwrap_or(0),
+                    dry_run: cli.dry_run,
+                    rate: cli.rate,
+                    json: cli.json,
+                    color,
+                },
+                &mut audit,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            Ok(ExitCode::from(code))
+        }
         None => {
             let audit = AuditLog::load(&audit_path).map_err(|e| anyhow::anyhow!(e))?;
 
@@ -477,8 +511,37 @@ mod tests {
         assert!(help.contains("fuzz") || help.contains("Fuzz"));
         assert!(help.contains("dns") || help.contains("Dns") || help.contains("DNS"));
         assert!(help.contains("net") || help.contains("Net"));
+        assert!(help.contains("hash") || help.contains("Hash"));
         assert!(help.contains("--json"));
         assert!(help.contains("--dry-run"));
+    }
+
+    #[test]
+    fn parses_hash_with_wordlist() {
+        let cli = Cli::try_parse_from([
+            "keld",
+            "--dry-run",
+            "hash",
+            "5eb63bbbe01eeed093cb22bb8f5acdc3",
+            "-w",
+            "words.txt",
+            "--algo",
+            "md5",
+        ])
+        .unwrap();
+        assert!(cli.dry_run);
+        match cli.command {
+            Some(Commands::Hash {
+                hash,
+                wordlist,
+                algo,
+            }) => {
+                assert_eq!(hash, "5eb63bbbe01eeed093cb22bb8f5acdc3");
+                assert_eq!(wordlist.unwrap().as_os_str(), "words.txt");
+                assert_eq!(algo, "md5");
+            }
+            other => panic!("expected Hash, got {other:?}"),
+        }
     }
 
     #[test]

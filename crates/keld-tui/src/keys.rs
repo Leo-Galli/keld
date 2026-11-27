@@ -50,8 +50,9 @@ const HELP_VIM: &[(&str, &str)] = &[
     ("Enter", "Activate"),
     ("Space", "Toggle"),
     ("s / p / y", "Scan: start / dry-run / SYN"),
-    ("s / p", "Probe / TLS / HTTP / Fuzz / DNS / Net"),
+    ("s / p", "Probe / TLS / HTTP / Fuzz / DNS / Net / Hash"),
     ("t / i", "Net: technique / refresh ifaces"),
+    ("a", "Hash: cycle algo"),
 ];
 
 const HELP_ARROWS: &[(&str, &str)] = &[
@@ -71,8 +72,9 @@ const HELP_ARROWS: &[(&str, &str)] = &[
     ("Enter", "Activate"),
     ("Space", "Toggle"),
     ("s / p / y", "Scan: start / dry-run / SYN"),
-    ("s / p", "Probe / TLS / HTTP / Fuzz / DNS / Net"),
+    ("s / p", "Probe / TLS / HTTP / Fuzz / DNS / Net / Hash"),
     ("t / i", "Net: technique / refresh ifaces"),
+    ("a", "Hash: cycle algo"),
 ];
 
 #[cfg(test)]

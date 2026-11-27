@@ -1,0 +1,28 @@
+---
+source: crates/keld-tui/src/ui.rs
+expression: shot
+---
+KELD  ws:default  scope: 10.0.0.0/24                                     12:00Z 
+┌ Nav ─┐┌ Hash ────────────────────────────────────────────────────────────────┐
+│ Dash ││>Hash [5eb63bbbe01eeed093cb22bb8f5acdc3]   Wordlist [rockyou.txt]     │
+│ Scan ││ Conc [64]  [ ] dry-run  algo:auto  state:idle                        │
+│ Prob ││Enter edit  Tab fields  s start  p dry-run  a algo                    │
+│ TLS  ││Progress ######################## 100%  checking                      │
+│ HTTP ││                                                                      │
+│ Fuzz ││ Kind       Algo         Detail                                       │
+│ DNS  ││> identify   md5          32-hex digest (5eb63bbbe01eeeed...)         │
+│ Net  ││ match      md5          hello world                                  │
+│*Hash ││                                                                      │
+│ Rpt  ││Detail: [identify] md5 -- 32-hex digest (5eb63bbbe01eeeed...)         │
+│ Ws   ││                                                                      │
+│ Jobs ││                                                                      │
+│ Aud  ││                                                                      │
+│ Set  ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+│      ││                                                                      │
+└──────┘└──────────────────────────────────────────────────────────────────────┘
+ scope: 10.0.0.0/24  jobs:1  rate:8/s  err:0  |  Tab focus  m sidebar  s start
